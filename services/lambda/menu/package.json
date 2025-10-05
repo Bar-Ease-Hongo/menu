@@ -13,7 +13,7 @@
     "@aws-sdk/client-bedrock-runtime": "3.540.0",
     "@aws-sdk/client-s3": "3.540.0",
     "@aws-sdk/lib-dynamodb": "3.540.0",
-    "@bar-ease/core": "workspace:*"
+    "@bar-ease/core": "file:../../packages/core"
   },
   "devDependencies": {
     "@types/aws-lambda": "8.10.131",

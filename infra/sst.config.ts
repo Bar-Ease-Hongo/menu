@@ -1,5 +1,4 @@
-import { SSTConfig } from 'sst';
-import { MenuStack } from './stacks/MenuStack';
+import type { SSTConfig } from 'sst';
 
 export default {
   config(_input) {
@@ -8,7 +7,8 @@ export default {
       region: process.env.AWS_REGION ?? 'ap-northeast-1'
     };
   },
-  stacks(app) {
+  async stacks(app) {
+    const { MenuStack } = await import('./stacks/MenuStack');
     app.stack(MenuStack);
   }
 } satisfies SSTConfig;

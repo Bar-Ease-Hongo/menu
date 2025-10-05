@@ -9,12 +9,12 @@
     "remove": "sst remove"
   },
   "dependencies": {
-    "@bar-ease/core": "workspace:*",
-    "@bar-ease/lambda-menu": "workspace:*",
-    "@bar-ease/lambda-recommend": "workspace:*",
+    "@bar-ease/core": "file:../packages/core",
+    "@bar-ease/lambda-menu": "file:../services/lambda/menu",
+    "@bar-ease/lambda-recommend": "file:../services/lambda/recommend",
     "aws-cdk-lib": "2.131.0",
     "constructs": "10.3.0",
-    "sst": "3.0.41"
+    "sst": "^2.36.7"
   },
   "devDependencies": {
     "typescript": "5.4.5"
