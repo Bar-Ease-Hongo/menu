@@ -1,0 +1,27 @@
+{
+  "name": "bar-ease-hongo",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "npm@10.5.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "aws-login": "aws sso login --sso-session solorit-sso",
+    "dev": "npm run dev --workspace @bar-ease/frontend",
+    "build:frontend": "npm run build --workspace @bar-ease/frontend",
+    "typecheck": "npm run typecheck --workspace @bar-ease/frontend",
+    "dev:sst:dev": "AWS_PROFILE=barease-dev AWS_SDK_LOAD_CONFIG=1 npm run dev --workspace @bar-ease/infra -- --stage barease-dev",
+    "dev:sst:prod": "AWS_PROFILE=barease-prod AWS_SDK_LOAD_CONFIG=1 npm run dev --workspace @bar-ease/infra -- --stage barease-prod",
+    "deploy:sst:dev": "AWS_PROFILE=barease-dev AWS_SDK_LOAD_CONFIG=1 npm run deploy --workspace @bar-ease/infra -- --stage barease-dev",
+    "deploy:sst:prod": "AWS_PROFILE=barease-prod AWS_SDK_LOAD_CONFIG=1 npm run deploy --workspace @bar-ease/infra -- --stage barease-prod",
+    "remove:sst:dev": "AWS_PROFILE=barease-dev AWS_SDK_LOAD_CONFIG=1 npm run remove --workspace @bar-ease/infra -- --stage barease-dev",
+    "lint": "npm run lint --workspace @bar-ease/frontend",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "3.2.5"
+  }
+}

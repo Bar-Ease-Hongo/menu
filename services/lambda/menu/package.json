@@ -1,0 +1,24 @@
+{
+  "name": "@bar-ease/lambda-menu",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "3.540.0",
+    "@aws-sdk/client-s3": "3.540.0",
+    "@aws-sdk/lib-dynamodb": "3.540.0",
+    "@bar-ease/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "8.10.131",
+    "eslint": "8.57.0",
+    "tsup": "7.3.0",
+    "typescript": "5.4.5"
+  }
+}

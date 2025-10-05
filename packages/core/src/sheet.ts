@@ -1,0 +1,33 @@
+export interface SheetRow {
+  id: string;
+  name?: string;
+  status?: string;
+  maker?: string;
+  makerSlug?: string;
+  category?: string;
+  tags?: string;
+  description?: string;
+  aiSuggestedDescription?: string;
+  aiSuggestedImageUrl?: string;
+  imageUrl?: string;
+  aiStatus?: string;
+  approveFlag?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  updatedAt?: string;
+  country?: string;
+  manufacturer?: string;
+  distributor?: string;
+  distillery?: string;
+  type?: string;
+  caskNumber?: string;
+  caskType?: string;
+  maturationPlace?: string;
+  maturationPeriod?: string;
+  alcoholVolume?: string;
+  availableBottles?: string;
+  price30ml?: string;
+  price15ml?: string;
+  price10ml?: string;
+  notes?: string;
+}

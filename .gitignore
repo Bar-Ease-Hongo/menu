@@ -1,0 +1,11 @@
+node_modules
+.DS_Store
+.next
+.out
+sst-env.d.ts
+.env
+.env.local
+coverage
+.aws-sam
+.sst
+cdk.out

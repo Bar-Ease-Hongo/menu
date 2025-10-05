@@ -1,0 +1,22 @@
+{
+  "name": "@bar-ease/infra",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "sst dev",
+    "deploy": "sst deploy",
+    "remove": "sst remove"
+  },
+  "dependencies": {
+    "@bar-ease/core": "workspace:*",
+    "@bar-ease/lambda-menu": "workspace:*",
+    "@bar-ease/lambda-recommend": "workspace:*",
+    "aws-cdk-lib": "2.131.0",
+    "constructs": "10.3.0",
+    "sst": "3.0.41"
+  },
+  "devDependencies": {
+    "typescript": "5.4.5"
+  }
+}
