@@ -201,6 +201,9 @@ function handleSheetEdit(e) {
         if (colApprovedAt) {
           sheet.getRange(editedRow, colApprovedAt).setValue(new Date().toISOString());
         }
+        if (colAiStatus) {
+          sheet.getRange(editedRow, colAiStatus).setValue('Approved');
+        }
         approved = true;
       } catch (err) {
         Logger.log('Webhook call failed: ' + err);

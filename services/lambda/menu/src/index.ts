@@ -91,6 +91,18 @@ function buildPublicImageUrl(key: string) {
   return `https://${PUBLIC_BUCKET_NAME}.s3.${REGION}.amazonaws.com/${encoded}`;
 }
 
+function toPercentageNumber(value?: string | number) {
+  if (value === undefined || value === null) return undefined;
+  const text = typeof value === 'number' ? String(value) : value.trim();
+  if (!text) return undefined;
+  const cleaned = text.replace(/[^0-9.]/g, '');
+  if (!cleaned) return undefined;
+  const numeric = Number(cleaned);
+  if (Number.isNaN(numeric)) return undefined;
+  const percent = numeric > 0 && numeric <= 1 ? numeric * 100 : numeric;
+  return Number(percent.toFixed(2));
+}
+
 async function findSheetEntityById(id: string): Promise<SheetEntity | undefined> {
   const sk = buildSortKey(id);
   const byKey = await dynamoClient.send(
@@ -536,6 +548,7 @@ async function querySheetRows(): Promise<SheetRow[]> {
 }
 
 function convertRowToMenuItem(row: SheetRow): MenuItem {
+  const alcoholVolume = toPercentageNumber(row.alcoholVolume);
   return {
     id: row.id,
     status: (row.status as MenuItem['status']) ?? 'Draft',
@@ -562,7 +575,7 @@ function convertRowToMenuItem(row: SheetRow): MenuItem {
     caskType: row.caskType,
     maturationPlace: row.maturationPlace,
     maturationPeriod: row.maturationPeriod,
-    alcoholVolume: row.alcoholVolume ? Number(row.alcoholVolume) : undefined,
+    alcoholVolume,
     availableBottles: row.availableBottles ? Number(row.availableBottles) : undefined,
     price30ml: row.price30ml ? Number(row.price30ml) : undefined,
     price15ml: row.price15ml ? Number(row.price15ml) : undefined,
@@ -573,11 +586,9 @@ function convertRowToMenuItem(row: SheetRow): MenuItem {
   };
 }
 
-function classifyAbv(alcoholVolume?: string) {
-  if (!alcoholVolume) return undefined;
-  const numericText = alcoholVolume.toString().replace('%', '');
-  const value = Number(numericText);
-  if (Number.isNaN(value)) return undefined;
+function classifyAbv(alcoholVolume?: string | number) {
+  const value = toPercentageNumber(alcoholVolume);
+  if (value === undefined) return undefined;
   if (value < 40) return 'low';
   if (value <= 46) return 'mid';
   return 'high';
