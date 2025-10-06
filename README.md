@@ -59,7 +59,7 @@ pnpm dev
 
 ## Lambda / バックエンド
 ### `services/lambda/menu`
-- `nightlyCompletionHandler`: DynamoDB から未承認行を抽出し Claude Haiku による補完案を生成（現状はログ出力まで。DynamoDB への書き戻しは TODO）。
+- `nightlyCompletionHandler`: DynamoDB から未承認行を抽出し Claude Haiku による補完案を生成、`aiSuggestedDescription` / `aiSuggestedImageUrl` として書き戻し、`aiStatus` を `NeedsReview` に更新。
 - `generateMenuHandler`: DynamoDB (`pk = sheet#menu`) の行を読み込み、`status === "Published"` かつ `approveFlag === "Approved"` のレコードのみを抽出して `menu.json` を S3 に PUT。
 - `webhookHandler`: GAS からの HMAC 署名付きリクエストを検証し、ステージング画像を本番バケットへコピー後 `generateMenuHandler` を実行します。
 

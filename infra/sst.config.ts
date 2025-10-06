@@ -81,6 +81,12 @@ export default {
           ],
         },
         link: [menuBucket, stagingBucket, publicBucket, table],
+        permissions: [
+          {
+            actions: ["bedrock:InvokeModel"],
+            resources: ["*"]
+          }
+        ],
         environment: {
           MENU_BUCKET_NAME: menuBucket.name,
           PUBLIC_IMAGE_BUCKET_NAME: publicBucket.name,

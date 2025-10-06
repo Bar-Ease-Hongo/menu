@@ -513,6 +513,59 @@ function mergeRowWithAi(row: SheetRow, aiJson: Record<string, unknown>): Partial
   };
 }
 
+async function saveAiSuggestion(row: SheetRow, aiJson: Record<string, unknown>) {
+  if (!row.id) {
+    return;
+  }
+
+  const entity = await findSheetEntityById(row.id);
+  if (!entity || !entity.pk || !entity.sk) {
+    console.warn('[nightly] skip AI save (missing pk/sk)', { id: row.id });
+    return;
+  }
+
+  const description = typeof aiJson.description === 'string' ? aiJson.description.trim() : undefined;
+  const imageUrl = typeof aiJson.imageUrl === 'string' ? aiJson.imageUrl.trim() : undefined;
+
+  const names: Record<string, string> = {
+    '#aiStatus': 'aiStatus',
+    '#updatedAt': 'updatedAt'
+  };
+  const values: Record<string, unknown> = {
+    ':aiStatus': 'NeedsReview',
+    ':updatedAt': new Date().toISOString()
+  };
+  const sets: string[] = ['#aiStatus = :aiStatus', '#updatedAt = :updatedAt'];
+
+  if (description) {
+    names['#aiSuggestedDescription'] = 'aiSuggestedDescription';
+    values[':aiSuggestedDescription'] = description;
+    sets.push('#aiSuggestedDescription = :aiSuggestedDescription');
+  }
+
+  if (imageUrl) {
+    names['#aiSuggestedImageUrl'] = 'aiSuggestedImageUrl';
+    values[':aiSuggestedImageUrl'] = imageUrl;
+    sets.push('#aiSuggestedImageUrl = :aiSuggestedImageUrl');
+  }
+
+  await dynamoClient.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { pk: entity.pk, sk: entity.sk },
+      UpdateExpression: `SET ${sets.join(', ')}`,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values
+    })
+  );
+
+  console.log('[nightly] AI suggestion saved', {
+    id: row.id,
+    hasDescription: Boolean(description),
+    hasImage: Boolean(imageUrl)
+  });
+}
+
 function slugify(input: string) {
   return input
     .toLowerCase()
@@ -633,13 +686,19 @@ export async function nightlyCompletionHandler(event: ScheduledEvent) {
     const prompt = buildPrompt(row);
     const response = await invokeClaude(prompt);
     const json = parseClaudeJson(response);
-    // TODO: DynamoDB 更新ロジックを追加（AppSync/AppFlow などと統合）
-    console.log('AI suggestion generated', { id: row.id, suggestion: json });
+    try {
+      await saveAiSuggestion(row, json);
+    } catch (error) {
+      console.error('[nightly] failed to save suggestion', { id: row.id, error });
+    }
   }
 
   await reconcileDataConsistency(rows as SheetEntity[]);
 
-  return { statusCode: 200, body: JSON.stringify({ processed: targets.length }) };
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ processed: targets.length })
+  };
 }
 
 export async function generateMenuHandler() {
