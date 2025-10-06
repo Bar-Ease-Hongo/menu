@@ -7,7 +7,7 @@ export default function HomePage() {
         <p className="font-display text-3xl text-accent">Bar Ease Hongo</p>
         <h1 className="font-display text-4xl">Discover Your Next Dram</h1>
         <p className="text-lg text-zinc-300">
-          スタッフが厳選したウイスキーリストと、お好みに合わせたAIレコメンドをお楽しみください。
+          厳選したウイスキーリストと、お好みに合わせたAIレコメンドをお楽しみください。
         </p>
       </div>
       <div className="flex flex-col gap-3">

@@ -1,8 +1,8 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, ScheduledEvent } from 'aws-lambda';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
-import { CopyObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { CopyObjectCommand, DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, DeleteCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 
 import type { MenuItem, MenuResponse, SheetRow } from '@bar-ease/core';
 
@@ -16,6 +16,411 @@ const TABLE_NAME = process.env.SHEET_TABLE_NAME as string;
 const bedrockClient = new BedrockRuntimeClient({ region: REGION });
 const s3Client = new S3Client({ region: REGION });
 const dynamoClient = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }));
+
+const SHEET_PK = 'sheet#menu';
+const SHEET_SK_PREFIX = 'item#';
+
+type SheetEntity = SheetRow & {
+  pk?: string;
+  sk?: string;
+  createdAt?: string;
+  publicKey?: string;
+  stagingKey?: string;
+};
+
+type SyncItemInput = SheetRow & {
+  stagingKey?: string;
+  publicKey?: string;
+};
+
+const SYNC_FIELD_NAMES: Array<keyof SyncItemInput> = [
+  'name',
+  'status',
+  'maker',
+  'makerSlug',
+  'category',
+  'tags',
+  'description',
+  'aiSuggestedDescription',
+  'aiSuggestedImageUrl',
+  'imageUrl',
+  'aiStatus',
+  'approveFlag',
+  'approvedBy',
+  'approvedAt',
+  'updatedAt',
+  'country',
+  'manufacturer',
+  'distributor',
+  'distillery',
+  'type',
+  'caskNumber',
+  'caskType',
+  'maturationPlace',
+  'maturationPeriod',
+  'alcoholVolume',
+  'availableBottles',
+  'price30ml',
+  'price15ml',
+  'price10ml',
+  'notes',
+  'stagingKey',
+  'publicKey'
+];
+
+function buildSortKey(id: string) {
+  return `${SHEET_SK_PREFIX}${id}`;
+}
+
+function parseTags(input?: string | string[]) {
+  if (Array.isArray(input)) {
+    return input.filter(Boolean);
+  }
+  if (!input) return [];
+  return input
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+function buildPublicImageUrl(key: string) {
+  const encoded = key
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+  return `https://${PUBLIC_BUCKET_NAME}.s3.${REGION}.amazonaws.com/${encoded}`;
+}
+
+async function findSheetEntityById(id: string): Promise<SheetEntity | undefined> {
+  const sk = buildSortKey(id);
+  const byKey = await dynamoClient.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: '#pk = :pk AND #sk = :sk',
+      ExpressionAttributeNames: {
+        '#pk': 'pk',
+        '#sk': 'sk'
+      },
+      ExpressionAttributeValues: {
+        ':pk': SHEET_PK,
+        ':sk': sk
+      },
+      Limit: 1
+    })
+  );
+
+  const keyHit = (byKey.Items as SheetEntity[]) ?? [];
+  if (keyHit[0]) {
+    return keyHit[0];
+  }
+
+  const legacy = await dynamoClient.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: '#pk = :pk',
+      FilterExpression: '#id = :id',
+      ExpressionAttributeNames: {
+        '#pk': 'pk',
+        '#id': 'id'
+      },
+      ExpressionAttributeValues: {
+        ':pk': SHEET_PK,
+        ':id': id
+      },
+      Limit: 1
+    })
+  );
+
+  const legacyItems = (legacy.Items as SheetEntity[]) ?? [];
+  return legacyItems[0];
+}
+
+function extractKeyFromUrl(url?: string) {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname.startsWith('/') ? parsed.pathname.slice(1) : parsed.pathname;
+    return decodeURIComponent(pathname);
+  } catch {
+    return undefined;
+  }
+}
+
+async function deleteObjectIfExists(bucket: string, key?: string) {
+  if (!key) return;
+  try {
+    await s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: bucket,
+        Key: key
+      })
+    );
+    console.log('[sync] deleted object', { bucket, key });
+  } catch (error) {
+    const code = (error as { name?: string }).name;
+    if (code === 'NoSuchKey') {
+      console.log('[sync] delete skipped (not found)', { bucket, key });
+      return;
+    }
+    console.warn('[sync] delete failed', { bucket, key, error });
+  }
+}
+
+async function upsertSheetItem(item: SyncItemInput) {
+  if (!item.id) {
+    throw new Error('missing id');
+  }
+
+  const now = new Date().toISOString();
+  const pk = SHEET_PK;
+  const sk = buildSortKey(item.id);
+  const existing = await findSheetEntityById(item.id);
+
+  const names: Record<string, string> = {
+    '#id': 'id',
+    '#syncedAt': 'syncedAt',
+    '#createdAt': 'createdAt'
+  };
+
+  const values: Record<string, unknown> = {
+    ':id': item.id,
+    ':syncedAt': now,
+    ':createdAt': existing?.createdAt ?? now
+  };
+
+  const setClauses = [
+    '#id = :id',
+    '#syncedAt = :syncedAt',
+    '#createdAt = if_not_exists(#createdAt, :createdAt)'
+  ];
+  const removeClauses: string[] = [];
+
+  const wasPublished = existing?.status === 'Published' && existing?.approveFlag === 'Approved';
+  const isPublished = item.status === 'Published' && item.approveFlag === 'Approved';
+  let shouldRegenerate = wasPublished || isPublished;
+
+  let previousPublicKey: string | undefined;
+  let previousStagingKey: string | undefined;
+
+  const clearImage = (() => {
+    if (!existing) return false;
+    if (item.publicKey && existing.publicKey && item.publicKey !== existing.publicKey) {
+      previousPublicKey = existing.publicKey;
+      previousStagingKey = existing.stagingKey ?? extractKeyFromUrl(existing.aiSuggestedImageUrl);
+      return true;
+    }
+    if (!item.publicKey && existing.publicKey) {
+      previousPublicKey = existing.publicKey;
+      previousStagingKey = existing.stagingKey ?? extractKeyFromUrl(existing.aiSuggestedImageUrl);
+      return true;
+    }
+    return false;
+  })();
+
+  const assign = (field: keyof SyncItemInput, value: unknown) => {
+    const nameKey = `#${field}`;
+    const valueKey = `:${field}`;
+    names[nameKey] = field as string;
+
+    if (value === undefined || value === null || value === '') {
+      removeClauses.push(nameKey);
+      return;
+    }
+
+    if (field === 'tags') {
+      values[valueKey] = Array.isArray(value) ? value : parseTags(String(value));
+    } else if (field === 'price30ml' || field === 'price15ml' || field === 'price10ml') {
+      values[valueKey] = typeof value === 'number' ? value : String(value);
+    } else if (field === 'availableBottles' || field === 'alcoholVolume') {
+      values[valueKey] = typeof value === 'number' ? value : String(value);
+    } else {
+      values[valueKey] = value;
+    }
+
+    setClauses.push(`${nameKey} = ${valueKey}`);
+  };
+
+  for (const field of SYNC_FIELD_NAMES) {
+    if (field === 'imageUrl') {
+      if (clearImage || Object.prototype.hasOwnProperty.call(item, field)) {
+        const value = clearImage ? '' : (item as Record<string, unknown>)[field];
+        assign(field, value);
+        if (clearImage) {
+          shouldRegenerate = true;
+        }
+      }
+      continue;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(item, field)) {
+      continue;
+    }
+
+    if (field === 'tags') {
+      assign(field, item.tags);
+      continue;
+    }
+
+    assign(field, (item as Record<string, unknown>)[field]);
+  }
+
+  await dynamoClient.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { pk, sk },
+      UpdateExpression: [
+        setClauses.length ? `SET ${setClauses.join(', ')}` : undefined,
+        removeClauses.length ? `REMOVE ${removeClauses.join(', ')}` : undefined
+      ]
+        .filter(Boolean)
+        .join(' '),
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values
+    })
+  );
+
+  if (previousPublicKey) {
+    await deleteObjectIfExists(PUBLIC_BUCKET_NAME, previousPublicKey);
+  }
+  if (previousStagingKey && previousStagingKey !== item.stagingKey) {
+    await deleteObjectIfExists(STAGING_BUCKET_NAME, previousStagingKey);
+  }
+
+  return { shouldRegenerate };
+}
+
+async function deleteSheetItem(itemId: string) {
+  const entity = await findSheetEntityById(itemId);
+  if (!entity) {
+    console.warn('[sync] delete skipped (entity not found)', { itemId });
+    return { removed: false, shouldRegenerate: false };
+  }
+
+  const pk = entity.pk ?? SHEET_PK;
+  const sk = entity.sk ?? buildSortKey(itemId);
+
+  await dynamoClient.send(
+    new DeleteCommand({
+      TableName: TABLE_NAME,
+      Key: { pk, sk }
+    })
+  );
+
+  const publicKey = entity.publicKey ?? extractKeyFromUrl(entity.imageUrl);
+  const stagingKey = entity.stagingKey ?? extractKeyFromUrl(entity.aiSuggestedImageUrl);
+
+  await Promise.all([
+    deleteObjectIfExists(PUBLIC_BUCKET_NAME, publicKey),
+    deleteObjectIfExists(STAGING_BUCKET_NAME, stagingKey)
+  ]);
+
+  const wasPublished = entity.status === 'Published' && entity.approveFlag === 'Approved';
+  return { removed: true, shouldRegenerate: wasPublished };
+}
+
+async function reconcileDataConsistency(rows: SheetEntity[]) {
+  const tasks: Promise<unknown>[] = [];
+  for (const row of rows) {
+    if (!row.id) continue;
+
+    const pk = row.pk ?? SHEET_PK;
+    const sk = row.sk ?? buildSortKey(row.id);
+
+  const names: Record<string, string> = {};
+  const values: Record<string, unknown> = {};
+  const setClauses: string[] = [];
+
+    if (row.publicKey && row.imageUrl && row.imageUrl !== buildPublicImageUrl(row.publicKey)) {
+      names['#imageUrl'] = 'imageUrl';
+      values[':imageUrl'] = buildPublicImageUrl(row.publicKey);
+      setClauses.push('#imageUrl = :imageUrl');
+    }
+
+    if (setClauses.length === 0) {
+      continue;
+    }
+
+    tasks.push(
+      dynamoClient.send(
+        new UpdateCommand({
+          TableName: TABLE_NAME,
+          Key: { pk, sk },
+          UpdateExpression: `SET ${setClauses.join(', ')}`,
+          ExpressionAttributeNames: names,
+          ExpressionAttributeValues: values
+        })
+      )
+    );
+  }
+
+  if (tasks.length > 0) {
+    await Promise.all(tasks);
+  }
+}
+
+async function updateApprovedItem({
+  itemId,
+  publicKey
+}: {
+  itemId: string;
+  publicKey?: string;
+}) {
+  if (!itemId) {
+    return;
+  }
+
+  const entity = await findSheetEntityById(itemId);
+  if (!entity || !entity.pk || !entity.sk) {
+    console.warn('[webhook] skip Dynamo update (entity missing pk/sk)', { itemId });
+    return;
+  }
+
+  const names: Record<string, string> = {
+    '#updatedAt': 'updatedAt'
+  };
+  const values: Record<string, unknown> = {
+    ':updatedAt': new Date().toISOString()
+  };
+  const sets: string[] = ['#updatedAt = :updatedAt'];
+
+  if (publicKey) {
+    names['#imageUrl'] = 'imageUrl';
+    values[':imageUrl'] = buildPublicImageUrl(publicKey);
+    sets.push('#imageUrl = :imageUrl');
+    names['#publicKey'] = 'publicKey';
+    values[':publicKey'] = publicKey;
+    sets.push('#publicKey = :publicKey');
+  }
+
+  if (entity.aiSuggestedDescription) {
+    names['#description'] = 'description';
+    values[':description'] = entity.aiSuggestedDescription;
+    sets.push('#description = :description');
+  }
+
+  if (entity.aiStatus !== 'Approved') {
+    names['#aiStatus'] = 'aiStatus';
+    values[':aiStatus'] = 'Approved';
+    sets.push('#aiStatus = :aiStatus');
+  }
+
+  if (sets.length === 1) {
+    console.log('[webhook] Dynamo update skipped (no changes)', { itemId });
+    return;
+  }
+
+  await dynamoClient.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { pk: entity.pk, sk: entity.sk },
+      UpdateExpression: `SET ${sets.join(', ')}`,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values
+    })
+  );
+
+  console.log('[webhook] Dynamo update complete', { itemId });
+}
 
 function buildPrompt(row: SheetRow) {
   return `以下のウイスキー情報を補完してください。欠損値は推定で構いませんが、真実味のある内容にしてください。
@@ -221,6 +626,8 @@ export async function nightlyCompletionHandler(event: ScheduledEvent) {
     console.log('AI suggestion generated', { id: row.id, suggestion: json });
   }
 
+  await reconcileDataConsistency(rows as SheetEntity[]);
+
   return { statusCode: 200, body: JSON.stringify({ processed: targets.length }) };
 }
 
@@ -247,7 +654,6 @@ export async function webhookHandler(event: APIGatewayProxyEventV2): Promise<API
 
   const signature = event.headers['x-signature'];
   const timestamp = event.headers['x-timestamp'];
-  console.log('[webhook] headers', { signature, timestamp });
 
   if (!signature || !(await verifySignature(signature, event.body, timestamp))) {
     console.warn('[webhook] invalid signature');
@@ -275,7 +681,6 @@ export async function webhookHandler(event: APIGatewayProxyEventV2): Promise<API
           Bucket: PUBLIC_BUCKET_NAME,
           CopySource: `${STAGING_BUCKET_NAME}/${payload.stagingKey}`,
           Key: payload.publicKey,
-          ACL: 'public-read',
           MetadataDirective: 'REPLACE',
           CacheControl: 'max-age=31536000'
         })
@@ -285,6 +690,8 @@ export async function webhookHandler(event: APIGatewayProxyEventV2): Promise<API
     } else {
       console.log('[webhook] copy skipped (missing keys)');
     }
+
+    await updateApprovedItem({ itemId: payload.itemId, publicKey: payload.publicKey });
 
     const result = await generateMenuHandler();
     console.log('[webhook] menu regenerate result', result);
@@ -296,9 +703,76 @@ export async function webhookHandler(event: APIGatewayProxyEventV2): Promise<API
   }
 }
 
+export async function syncMenuHandler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  if (!event.body) {
+    return { statusCode: 400, body: 'missing body' };
+  }
+
+  const signature = event.headers['x-signature'] ?? event.headers['X-Signature'];
+  const timestamp = event.headers['x-timestamp'] ?? event.headers['X-Timestamp'];
+
+  if (!signature || !(await verifySignature(signature, event.body, timestamp))) {
+    console.warn('[sync] invalid signature');
+    return { statusCode: 401, body: 'invalid signature' };
+  }
+
+  try {
+    const payload = JSON.parse(event.body) as {
+      action?: 'upsert' | 'batch' | 'delete';
+      item?: SyncItemInput;
+      items?: SyncItemInput[];
+      itemId?: string;
+      itemIds?: string[];
+    };
+
+    const action = payload.action ?? (payload.items ? 'batch' : 'upsert');
+    let shouldRegenerate = false;
+    const processed: string[] = [];
+
+    if (action === 'delete') {
+      const ids = payload.itemIds ?? (payload.itemId ? [payload.itemId] : []);
+      if (ids.length === 0) {
+        return { statusCode: 400, body: 'missing itemId' };
+      }
+      for (const id of ids) {
+        const result = await deleteSheetItem(id);
+        shouldRegenerate = shouldRegenerate || result.shouldRegenerate;
+        if (result.removed) {
+          processed.push(id);
+        }
+      }
+    } else {
+      const items = payload.items ?? (payload.item ? [payload.item] : []);
+      if (items.length === 0) {
+        return { statusCode: 400, body: 'missing item payload' };
+      }
+
+      for (const item of items) {
+        const result = await upsertSheetItem(item);
+        shouldRegenerate = shouldRegenerate || result.shouldRegenerate;
+        if (item.id) {
+          processed.push(item.id);
+        }
+      }
+    }
+
+    if (shouldRegenerate) {
+      await generateMenuHandler();
+    }
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: true, processed })
+    };
+  } catch (error) {
+    console.error('[sync] error', error);
+    return { statusCode: 500, body: JSON.stringify({ error: (error as Error).message }) };
+  }
+}
+
 async function verifySignature(signature: string, body: string, timestampHeader?: string) {
   if (!timestampHeader) return false;
-  const secret = process.env.GAS_WEBHOOK_SECRET ?? '';
+  const secret = (process.env.GAS_WEBHOOK_SECRET ?? '').trim();
   const timestamp = Number(timestampHeader);
   if (Number.isNaN(timestamp) || Math.abs(Date.now() - timestamp) > 5 * 60 * 1000) {
     return false;
@@ -307,11 +781,20 @@ async function verifySignature(signature: string, body: string, timestampHeader?
   const crypto = await import('crypto');
   const computed = crypto.createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
   const expected = Buffer.from(computed, 'hex');
-  const actual = Buffer.from(signature, 'hex');
+  let actual: Buffer;
+  try {
+    actual = Buffer.from(signature.toLowerCase(), 'hex');
+  } catch {
+    return false;
+  }
   if (expected.length !== actual.length) {
     return false;
   }
   return crypto.timingSafeEqual(actual, expected);
 }
 
-export type Handlers = typeof nightlyCompletionHandler | typeof generateMenuHandler | typeof webhookHandler;
+export type Handlers =
+  | typeof nightlyCompletionHandler
+  | typeof generateMenuHandler
+  | typeof webhookHandler
+  | typeof syncMenuHandler;

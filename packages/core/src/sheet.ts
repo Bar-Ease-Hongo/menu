@@ -10,6 +10,8 @@ export interface SheetRow {
   aiSuggestedDescription?: string;
   aiSuggestedImageUrl?: string;
   imageUrl?: string;
+  stagingKey?: string;
+  publicKey?: string;
   aiStatus?: string;
   approveFlag?: string;
   approvedBy?: string;

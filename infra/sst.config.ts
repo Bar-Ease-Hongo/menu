@@ -106,11 +106,33 @@ export default {
           "@aws-sdk/lib-dynamodb"
         ],
       },
-      link: [menuBucket, publicBucket, stagingBucket, gasSecret],
+      link: [menuBucket, publicBucket, stagingBucket, table, gasSecret],
       environment: {
         MENU_BUCKET_NAME: menuBucket.name,
         PUBLIC_IMAGE_BUCKET_NAME: publicBucket.name,
         STAGING_IMAGE_BUCKET_NAME: stagingBucket.name,
+        SHEET_TABLE_NAME: table.name,
+        GAS_WEBHOOK_SECRET: gasSecret.value,
+      },
+    });
+
+    const syncFn = new aws.Function("SyncMenu", {
+      handler: "../services/lambda/menu/src/index.syncMenuHandler",
+      runtime: "nodejs20.x",
+      nodejs: {
+        install: [
+          "@aws-sdk/client-bedrock-runtime",
+          "@aws-sdk/client-s3",
+          "@aws-sdk/client-dynamodb",
+          "@aws-sdk/lib-dynamodb"
+        ],
+      },
+      link: [menuBucket, publicBucket, stagingBucket, table, gasSecret],
+      environment: {
+        MENU_BUCKET_NAME: menuBucket.name,
+        PUBLIC_IMAGE_BUCKET_NAME: publicBucket.name,
+        STAGING_IMAGE_BUCKET_NAME: stagingBucket.name,
+        SHEET_TABLE_NAME: table.name,
         GAS_WEBHOOK_SECRET: gasSecret.value,
       },
     });
@@ -138,6 +160,7 @@ export default {
     // 既存 API に POST /recommend /webhook を追加（既存関数を呼び出し）
     api.route("POST /recommend", recommendFn.arn);
     api.route("POST /webhook", webhookFn.arn);
+    api.route("POST /sync/menu", syncFn.arn);
 
     // ステップ6: Next.js サイト（CloudFront 配信）
     const menuJsonUrl = menuBucket.domain.apply(
