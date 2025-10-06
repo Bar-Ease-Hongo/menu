@@ -31,6 +31,36 @@ async function resolveFixtureDir(): Promise<string> {
   return FIXTURE_DIR;
 }
 
+async function readFixtureJson<T>(filename: string): Promise<T | null> {
+  try {
+    const dir = await resolveFixtureDir();
+    const filePath = path.join(dir, filename);
+    const data = await fs.readFile(filePath, 'utf-8');
+    return JSON.parse(data) as T;
+  } catch (error) {
+    console.warn(`[menu] フォールバックの読み込みに失敗しました (${filename})`, error);
+    return null;
+  }
+}
+
+function normalizeMakerList(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((value) => {
+      if (typeof value === 'string') return value;
+      if (value && typeof value === 'object') {
+        const maker = (value as { maker?: string }).maker;
+        if (typeof maker === 'string') return maker;
+      }
+      return null;
+    })
+    .filter((value): value is string => Boolean(value));
+}
+
+function emptyMenu(): MenuResponse {
+  return { items: [], total: 0, updatedAt: new Date().toISOString() };
+}
+
 export interface MenuQueryParams {
   keyword?: string;
   maker?: string;
@@ -40,49 +70,35 @@ export interface MenuQueryParams {
 
 export async function fetchMenu(): Promise<MenuResponse> {
   if (!MENU_URL) {
-    const dir = await resolveFixtureDir();
-    const filePath = path.join(dir, 'menu.sample.json');
-    const data = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(data) as MenuResponse;
+    const fallback = await readFixtureJson<MenuResponse>('menu.sample.json');
+    return fallback ?? emptyMenu();
   }
 
   try {
     const res = await fetch(MENU_URL, {
-      next: { revalidate: 60 }
+      cache: 'no-store'
     });
 
     if (!res.ok) {
-      // 404 等で未配置の場合はローカルのサンプルにフォールバック
       if (res.status === 404) {
-        const dir = await resolveFixtureDir();
-        const filePath = path.join(dir, 'menu.sample.json');
-        const data = await fs.readFile(filePath, 'utf-8');
-        return JSON.parse(data) as MenuResponse;
+        const fallback = await readFixtureJson<MenuResponse>('menu.sample.json');
+        return fallback ?? emptyMenu();
       }
       throw new Error(`menu.json の取得に失敗しました: ${res.status}`);
     }
 
     return (await res.json()) as MenuResponse;
   } catch (err) {
-    // ネットワークエラー等でもフォールバック（開発時の利便性優先）
-    const dir = await resolveFixtureDir();
-    const filePath = path.join(dir, 'menu.sample.json');
-    const data = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(data) as MenuResponse;
+    console.error('[menu] menu.json の取得に失敗しました', err);
+    const fallback = await readFixtureJson<MenuResponse>('menu.sample.json');
+    return fallback ?? emptyMenu();
   }
 }
 
 export async function fetchMakers(): Promise<string[]> {
   if (!MAKERS_URL) {
-    try {
-      const dir = await resolveFixtureDir();
-      const filePath = path.join(dir, 'makers.sample.json');
-      const data = await fs.readFile(filePath, 'utf-8');
-      const json = JSON.parse(data) as { makers: string[] };
-      return json.makers ?? [];
-    } catch {
-      return [];
-    }
+    const fallback = await readFixtureJson<{ makers: unknown }>('makers.sample.json');
+    return normalizeMakerList(fallback?.makers);
   }
 
   try {
@@ -92,29 +108,18 @@ export async function fetchMakers(): Promise<string[]> {
 
     if (!res.ok) {
       if (res.status === 404) {
-        // 404 はローカルサンプルにフォールバック
-        const dir = await resolveFixtureDir();
-        const filePath = path.join(dir, 'makers.sample.json');
-        const data = await fs.readFile(filePath, 'utf-8');
-        const json = JSON.parse(data) as { makers: string[] };
-        return json.makers ?? [];
+        const fallback = await readFixtureJson<{ makers: unknown }>('makers.sample.json');
+        return normalizeMakerList(fallback?.makers);
       }
       return [];
     }
 
-    const data = (await res.json()) as { makers: string[] };
-    return data.makers ?? [];
-  } catch {
-    // ネットワーク等の例外時もフォールバック
-    try {
-      const dir = await resolveFixtureDir();
-      const filePath = path.join(dir, 'makers.sample.json');
-      const data = await fs.readFile(filePath, 'utf-8');
-      const json = JSON.parse(data) as { makers: string[] };
-      return json.makers ?? [];
-    } catch {
-      return [];
-    }
+    const data = (await res.json()) as { makers?: unknown };
+    return normalizeMakerList(data.makers);
+  } catch (error) {
+    console.error('[menu] makers.json の取得に失敗しました', error);
+    const fallback = await readFixtureJson<{ makers: unknown }>('makers.sample.json');
+    return normalizeMakerList(fallback?.makers);
   }
 }
 

@@ -8,4 +8,5 @@ sst-env.d.ts
 coverage
 .aws-sam
 .sst
+.open-next
 cdk.out

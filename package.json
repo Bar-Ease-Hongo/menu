@@ -2,7 +2,7 @@
   "name": "bar-ease-hongo",
   "private": true,
   "version": "0.1.0",
-  "packageManager": "npm@10.5.0",
+  "packageManager": "pnpm@9.12.3",
   "engines": {
     "node": "22.20.0"
   },

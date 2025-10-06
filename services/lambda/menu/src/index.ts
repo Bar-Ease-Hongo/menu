@@ -115,6 +115,7 @@ function normalizeTags(tags: string | string[]) {
 }
 
 async function querySheetRows(): Promise<SheetRow[]> {
+  console.log('[generateMenu] query start');
   const result = await dynamoClient.send(
     new QueryCommand({
       TableName: TABLE_NAME,
@@ -124,7 +125,9 @@ async function querySheetRows(): Promise<SheetRow[]> {
     })
   );
 
-  return (result.Items as SheetRow[]) ?? [];
+  const rows = (result.Items as SheetRow[]) ?? [];
+  console.log('[generateMenu] query done', rows.length);
+  return rows;
 }
 
 function convertRowToMenuItem(row: SheetRow): MenuItem {
@@ -192,6 +195,7 @@ async function putMenuJson(items: MenuItem[]) {
     updatedAt: new Date().toISOString()
   };
 
+  console.log('[generateMenu] putMenuJson start', payload.total);
   await s3Client.send(
     new PutObjectCommand({
       Bucket: MENU_BUCKET_NAME,
@@ -201,6 +205,7 @@ async function putMenuJson(items: MenuItem[]) {
       CacheControl: 'max-age=60, s-maxage=300'
     })
   );
+  console.log('[generateMenu] putMenuJson done');
 }
 
 export async function nightlyCompletionHandler(event: ScheduledEvent) {
@@ -220,12 +225,16 @@ export async function nightlyCompletionHandler(event: ScheduledEvent) {
 }
 
 export async function generateMenuHandler() {
+  console.log('[generateMenu] start');
   const rows = await querySheetRows();
+  console.log('[generateMenu] rows fetched', rows.length);
   const items = rows
     .map(convertRowToMenuItem)
     .filter((item) => item.status === 'Published' && item.approveFlag === 'Approved');
 
+  console.log('[generateMenu] filtered items', items.length);
   await putMenuJson(items);
+  console.log('[generateMenu] put complete');
   return { statusCode: 200, body: JSON.stringify({ total: items.length }) };
 }
 
@@ -234,8 +243,14 @@ export async function webhookHandler(event: APIGatewayProxyEventV2): Promise<API
     return { statusCode: 400, body: 'missing body' };
   }
 
+  console.log('[webhook] received body', event.body);
+
   const signature = event.headers['x-signature'];
-  if (!signature || !(await verifySignature(signature, event.body, event.headers['x-timestamp']))) {
+  const timestamp = event.headers['x-timestamp'];
+  console.log('[webhook] headers', { signature, timestamp });
+
+  if (!signature || !(await verifySignature(signature, event.body, timestamp))) {
+    console.warn('[webhook] invalid signature');
     return { statusCode: 401, body: 'invalid signature' };
   }
 
@@ -244,20 +259,41 @@ export async function webhookHandler(event: APIGatewayProxyEventV2): Promise<API
     publicKey: string;
     itemId: string;
   };
+  console.log('[webhook] payload', payload);
 
-  await s3Client.send(
-    new CopyObjectCommand({
-      Bucket: PUBLIC_BUCKET_NAME,
-      CopySource: `${STAGING_BUCKET_NAME}/${payload.stagingKey}`,
-      Key: payload.publicKey,
-      ACL: 'public-read',
-      MetadataDirective: 'REPLACE',
-      CacheControl: 'max-age=31536000'
-    })
-  );
+  try {
+    if (payload.stagingKey && payload.publicKey) {
+      console.log('[webhook] copy start', {
+        sourceBucket: STAGING_BUCKET_NAME,
+        sourceKey: payload.stagingKey,
+        targetBucket: PUBLIC_BUCKET_NAME,
+        targetKey: payload.publicKey
+      });
 
-  await generateMenuHandler();
-  return { statusCode: 200, body: JSON.stringify({ ok: true }) };
+      await s3Client.send(
+        new CopyObjectCommand({
+          Bucket: PUBLIC_BUCKET_NAME,
+          CopySource: `${STAGING_BUCKET_NAME}/${payload.stagingKey}`,
+          Key: payload.publicKey,
+          ACL: 'public-read',
+          MetadataDirective: 'REPLACE',
+          CacheControl: 'max-age=31536000'
+        })
+      );
+
+      console.log('[webhook] copy done');
+    } else {
+      console.log('[webhook] copy skipped (missing keys)');
+    }
+
+    const result = await generateMenuHandler();
+    console.log('[webhook] menu regenerate result', result);
+
+    return { statusCode: 200, body: JSON.stringify({ ok: true }) };
+  } catch (error) {
+    console.error('[webhook] error', error);
+    return { statusCode: 500, body: JSON.stringify({ error: (error as Error).message }) };
+  }
 }
 
 async function verifySignature(signature: string, body: string, timestampHeader?: string) {
