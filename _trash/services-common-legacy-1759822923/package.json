@@ -1,0 +1,24 @@
+{
+  "name": "@bar-ease/common",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/bedrock.js",
+  "types": "dist/bedrock.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/bedrock.js",
+      "types": "./dist/bedrock.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup bedrock.ts --format esm --dts --out-dir dist --target node20 --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "3.540.0"
+  },
+  "devDependencies": {
+    "tsup": "7.3.0",
+    "typescript": "5.4.5",
+    "@types/node": "20.11.30"
+  }
+}

@@ -1,4 +1,4 @@
-import type { RecommendFilters } from './menu';
+import type { RecommendFilters } from './menu.js';
 
 export interface RecommendRequestBody {
   text: string;

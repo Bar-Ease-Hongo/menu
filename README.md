@@ -107,6 +107,11 @@ Apps Script エディタ右上の歯車アイコン → `プロジェクトの�
   1. 上記 `ApiUrl` を用い、`SYNC_URL = <ApiUrl>/sync/menu` の形式で設定します。
   2. GAS からの Upsert/Delete 同期で使用されるため、`WEBHOOK_SECRET` と同じ HMAC シークレットを利用します。
 
+- `AI_SUGGESTIONS_URL` (AI サジェスト Pull を利用する場合のみ)
+  1. `AI_SUGGESTIONS_URL = <ApiUrl>/ai/suggestions` の形式で設定します。
+  2. `fetchAiSuggestions` / `manualFetchAiSuggestions` 関数が参照し、AI 候補説明文 / 画像URL を取得します。
+  3. 未利用の場合は設定不要です。
+
 ### 3. 初回セットアップの実行
 1. Apps Script エディタで `setupMenuSheet` を選択して実行。
 2. 初回実行時に表示される認可ダイアログで [続行] → Google アカウント選択 → [許可] を行います。
@@ -128,6 +133,13 @@ onEdit（単純トリガー）は認可が不要な範囲でのみ動作する�
   - イベントのソース: `時間主導型`
   - イベントの種類: 任意の間隔（例: `5 分おき`）
 
+AI サジェスト Pull を併用する場合 (任意):
+- 追加で時間主導トリガーを作成
+  - 実行する関数: `manualFetchAiSuggestions`
+  - イベントのソース: `時間主導型`
+  - イベントの種類: `15 分おき` など（補完頻度に応じ調整）
+  - 目的: `nightlyCompletionHandler` 等で生成された DynamoDB 上の候補をシートへ反映
+
 補足
 - インストール型トリガーは「実行ユーザー」の権限で動作するため、`UrlFetchApp`・`PropertiesService` などの認可が必要なサービスを利用できます。
 - 既に `onEdit(e)` を残している場合は競合しないよう削除または未使用のままで問題ありません（本番は `handleSheetEdit` のみに統一）。
@@ -144,6 +156,60 @@ onEdit（単純トリガー）は認可が不要な範囲でのみ動作する�
 - Lambda 側で 2xx 応答が返らない場合、Apps Script の実行ログに HTTP ステータスとレスポンス本文が記録されます。
 - 画像キーを `public/ITEM0001.jpg` のように事前に決めておくと、Web フロントエンド側での参照が一貫します。
 - ステージング画像のキー（`AI候補画像URL`）が未入力の場合はコピーをスキップし、`menu.json` の再生成のみ実行されます。
+
+### 関数一覧 (GAS)
+| 関数 | カテゴリ | 目的 / 動作 | 呼び出し形態 / トリガー | 備考 |
+|------|----------|-------------|--------------------------|------|
+| `setupMenuSheet` | 初期化 | ヘッダ列追加 / ID 採番 / 検証 / 保護設定 | 初回手動 | 既存列は重複スキップ |
+| `handleSheetEdit` | 編集処理 | 行編集に応じ承認/AIステータス補正 & Webhook/Sync 呼出 | インストール型編集トリガー | 認可必須 |
+| `scheduledSyncTrigger` | 同期 | 全行バッチ同期 + 削除検出 | 時間主導 | フルスキャン 25件チャンク |
+| `manualSync` | 同期 | 即時フル同期 | 手動 | デバッグ用途 |
+| `fetchAiSuggestions({ overwrite })` | AI Pull | DynamoDB 候補を空セルへ反映 | 時間主導 | `overwrite:true` で強制上書き |
+| `manualFetchAiSuggestions` | AI Pull | 候補取得手動実行 | 手動 | 初回認可確認 |
+| `callSignedApi` | 署名 | POST HMAC 生成送信 | 内部 | `timestamp + '.' + body` |
+| `callSignedGet` | 署名 | GET HMAC 生成送信 | 内部 | `timestamp + '.GET'` |
+| `syncSheetState` | 同期内部 | upsert + 削除判定 | `scheduledSyncTrigger` | knownIds 比較 |
+| `collectRowForSync` | 変換 | 行→正規化オブジェクト | 内部 | 空 ID 行除外 |
+| `recordKnownId` / `getKnownIds` | 状態 | 既知 ID 管理 | 内部 | ScriptProperties 保存 |
+
+### 署名仕様 (GET / POST)
+| メソッド | 署名対象文字列 | 典型例 | 用途 |
+|----------|----------------|---------|------|
+| POST | `timestamp + '.' + body-json` | `1696660000000.{"action":"upsert"}` | `/webhook`, `/sync/menu` |
+| GET  | `timestamp + '.GET'` | `1696660000000.GET` | `/ai/suggestions` |
+
+計算: `sig = hex( HMAC_SHA256(payloadString, secret)).toLowerCase()` → ヘッダ `X-Timestamp`, `X-Signature`。許容時差 ±5 分。失敗時は 401 (`invalid signature`)。
+
+### トラブルシュート (GAS / AI Pull)
+| 症状 | 区分 | 原因 | 対処 |
+|------|------|------|------|
+| 401 invalid signature (POST) | Webhook/Sync | シークレット不一致 / 時計ずれ | シークレット再設定 / 端末時刻同期 |
+| 401 invalid signature (GET) | AI Pull | `.GET` 付与漏れ | 署名文字列を `timestamp + '.GET'` へ修正 |
+| 候補が更新されない | AI Pull | `AI_SUGGESTIONS_URL` 未設定 / Approved 行 | Script Properties / 行状態確認 |
+| Approved 行が上書き | AI Pull | overwrite:true 誤用 | overwrite:false 運用 |
+| JSON parse error | AI Pull | API 500 / 返却不正 | CloudWatch Logs 確認 |
+| 削除が反映されない | Sync | `scheduledSyncTrigger` 未設定 | 時間主導トリガー追加 |
+| ID 採番漏れ | 初期化 | `setupMenuSheet` 未実行 | 再実行して ID 採番 |
+| 画像が公開されない | Webhook | ステージングキー空 / 承認未実施 | 候補URL入力後承認フラグ更新 |
+| DynamoDB に行が無い | Sync | 単純 onEdit 使用 | インストール型編集トリガー再設定 |
+| 高頻度呼び出し懸念 | AI Pull | トリガー間隔短すぎ | 15 分以上へ延長 |
+| シークレット漏洩 | セキュリティ | 複数場所へ貼付 | `.env` + Script Properties に限定 |
+
+### AI サジェスト Pull の統合運用
+AI 補完候補（説明文 / 画像URL）を `GET /ai/suggestions` で取得し、シートの空セルに自動投入します。`nightlyCompletionHandler` で DynamoDB に格納された候補を **GAS が Pull** する方式です。
+
+#### 承認フロー
+1. `nightlyCompletionHandler` / 追加ロジックで DynamoDB に候補格納
+2. 時間トリガーで `manualFetchAiSuggestions()` 実行 → シート空セルへ反映 (`AIステータス`: NeedsReview)
+3. 人間レビュー後 `承認フラグ` = 承認 → Webhook → 画像コピー & `menu.json` / `embeddings.json` 再生成
+4. CloudFront キャッシュ経由で 5 分以内にフロントへ反映
+
+#### 運用 Tips
+- 再取得強制: Apps Script コンソールで `fetchAiSuggestions({ overwrite:true })`
+- Approved 行はスキップして再上書きを避ける実装
+- 候補未取得時は `AIステータス` を `None` または空で維持
+
+---
 
 ## 運用メモ
 - `nightlyCompletionHandler` は EventBridge Scheduler で 1 日 1 回以上起動させ、欠損補完ログを確認する想定です。
@@ -164,3 +230,69 @@ pnpm aws-login                   # AWS SSO ログイン補助
 - Claude リランキング（Top-K 再スコアリング）
 - メーカー別 QR アクセス `/menu?maker=` の QR コード自動生成
 - E2E テスト（Playwright）による UI 品質担保
+
+## オペレーションガイド (統合)
+
+### 1. Lambda の依存解決ポリシー
+SST Ion (esbuild) によるバンドルで完結させ、`nodejs.install` は使用しません。Lambda パッケージング時の `failed to run npm install` エラー回避とデプロイ高速化が目的です。
+
+### 2. 共通パッケージ構造
+`@bar-ease/common` (`packages/common`) に Bedrock ラッパ (`invokeClaude`, `createEmbedding`, 環境ログ, allow-list, カスタムエラー) を集約し、Lambda 間でのロジック重複を排除します。新規共通処理はここに追加してください。
+
+### 3. Bedrock 権限最小化
+IAM ポリシーは使用モデル ARN のみに限定:
+- Claude 3 Haiku: `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`
+- Titan Embeddings v2: `bedrock:InvokeModel`
+モデル ID は環境変数 (`BEDROCK_MODEL_CLAUDE`, `BEDROCK_MODEL_EMBEDDING`) で差し替え可能。ラッパ内で allow-list プレフィックス検証を行い想定外モデル使用を早期検出します。
+
+### 4. デプロイ手順 (再掲)
+```bash
+pnpm install                 # 初回のみ
+AWS_PROFILE=barease-dev pnpm deploy:sst:dev
+AWS_PROFILE=barease-prod pnpm deploy:sst:prod
+```
+失敗例が `nodejs.install` 起因の場合は該当設定を除去してください。
+
+### 5. ログ / メトリクス監視 (推奨)
+CloudWatch Logs でフィルタパターンを作成:
+- `[timestamp=*Z, ... "[bedrock] invokeClaude success" ...]`
+- `[timestamp=*Z, ... "[bedrock] createEmbedding success" ...]`
+→ メトリクス化しアラーム閾値 (例: 1 時間ゼロ件で通知) を設定。
+
+
+### 7. トラブルシューティング
+| 症状 | 想定原因 | 対処 |
+|------|----------|------|
+| `failed to run npm install` | 旧 `nodejs.install` 使用 | 該当記述削除し再デプロイ |
+| Bedrock AccessDenied | ARN/リージョン不一致 | `sst.config.ts` の ARN と環境変数確認 |
+| `@bar-ease/common` 型解決失敗 | exports / tsconfig 不整合 | `tsconfig.base.json` と `package.json` の `exports` を整合 |
+| AI 候補が更新されない | トリガー未設定 / 署名不一致 | GAS 時間トリガー / `WEBHOOK_SECRET` を再確認 |
+| Approved 行が再書き換え | overwrite=true 強制上書き | 通常は overwrite:false を使用 |
+
+### 8. 将来最適化案
+- Embedding 差分更新 (ハッシュ比較で未変更スキップ)
+- `menu.json` CloudFront キャッシュ戦略チューニング (`stale-while-revalidate` 導入検討)
+- 失敗リクエストの DLQ (SQS) 化
+- Bedrock 呼び出しコストの Athena 分析 (CloudTrail Lake or CUR 利用)
+
+---
+
+---
+
+## Bedrock モデルアクセス変更と SST v3 での権限付与
+
+**更新日時**: 2025-10-06 16:09 (JST)
+
+- 2025-09-29 以降、Amazon Bedrock の「モデルアクセス」ページは廃止され、**サーバーレス基盤モデルは自動有効化**。アクセス制御は **IAM / SCP** で実施します。
+- 本プロジェクトでは **NightlyMenuCompletion（AI 補完）** と **Recommend（レコメンド）** の 2 関数に対し、**最小権限**で Bedrock を許可しました。
+  - NightlyMenuCompletion: `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream` を **Claude 3 Haiku** のモデル ARN に限定付与  
+  - Recommend: `bedrock:InvokeModel` を **Titan Text Embeddings v2** のモデル ARN に限定付与
+- **モデル ID / 既定値**
+  - Claude 3 Haiku: `anthropic.claude-3-haiku-20240307-v1:0`
+  - Titan Embeddings v2: `amazon.titan-embed-text-v2:0`
+- **ARN 生成規則（東京リージョン `ap-northeast-1`）**
+  - `arn:aws:bedrock:ap-northeast-1::foundation-model/<MODEL_ID>`
+
+※ モデル差し替えは `.env` などで `BEDROCK_MODEL_CLAUDE` / `BEDROCK_MODEL_EMBEDDING` を変更するだけで可能です。
+
+上記 Bedrock 方針は「オペレーションガイド 3. Bedrock 権限最小化」に統合されています。重複するため運用観点の最新情報は同ガイド節を参照してください。

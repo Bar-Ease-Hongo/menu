@@ -14,6 +14,13 @@ export default {
     // @ts-ignore Ion がグローバルに注入
     const { aws, Secret } = sst as any;
     const api = new aws.ApiGatewayV2("MenuApi");
+    // === Bedrock model IDs/ARNs (Tokyo) ===
+    const __regionForArns = (process.env.AWS_REGION ?? "ap-northeast-1");
+    const __CLAUDE_HAIKU_ID = process.env.BEDROCK_MODEL_CLAUDE ?? "anthropic.claude-3-haiku-20240307-v1:0";
+    const __TITAN_EMBED_ID = process.env.BEDROCK_MODEL_EMBEDDING ?? "amazon.titan-embed-text-v2:0";
+    const __CLAUDE_HAIKU_ARN = `arn:aws:bedrock:${__regionForArns}::foundation-model/${__CLAUDE_HAIKU_ID}`;
+    const __TITAN_EMBED_ARN = `arn:aws:bedrock:${__regionForArns}::foundation-model/${__TITAN_EMBED_ID}`;
+    
     // sst.config.ts のある "infra" ディレクトリが解決ルートのため相対パスに修正
     api.route("GET /health", "src/health.handler");
 
@@ -44,14 +51,6 @@ export default {
       handler: "../services/lambda/menu/src/index.generateMenuHandler",
       runtime: "nodejs20.x",
       timeout: "60 seconds",
-      nodejs: {
-        install: [
-          "@aws-sdk/client-bedrock-runtime",
-          "@aws-sdk/client-s3",
-          "@aws-sdk/client-dynamodb",
-          "@aws-sdk/lib-dynamodb"
-        ],
-      },
       link: [menuBucket, publicBucket, stagingBucket, table],
       environment: {
         MENU_BUCKET_NAME: menuBucket.name,
@@ -60,7 +59,14 @@ export default {
         SHEET_TABLE_NAME: table.name,
         BEDROCK_MODEL_CLAUDE:
           process.env.BEDROCK_MODEL_CLAUDE ?? "anthropic.claude-3-haiku-20240307-v1:0",
+        BEDROCK_MODEL_EMBEDDING:
+          process.env.BEDROCK_MODEL_EMBEDDING ?? "amazon.titan-embed-text-v2:0",
+        EMBEDDING_KEY: process.env.EMBEDDING_KEY ?? 'embeddings.json'
       },
+      permissions: [
+        { actions: ["bedrock:InvokeModel"], resources: [__TITAN_EMBED_ARN] },
+        { actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"], resources: [__CLAUDE_HAIKU_ARN] }
+      ]
     });
 
     // ステップ5: Nightly Cron（AI 補完/メニュー再生成の定期実行）
@@ -72,21 +78,15 @@ export default {
         handler: "../services/lambda/menu/src/index.nightlyCompletionHandler",
         runtime: "nodejs20.x",
         timeout: "60 seconds",
-        nodejs: {
-          install: [
-            "@aws-sdk/client-bedrock-runtime",
-            "@aws-sdk/client-s3",
-            "@aws-sdk/client-dynamodb",
-            "@aws-sdk/lib-dynamodb"
-          ],
-        },
         link: [menuBucket, stagingBucket, publicBucket, table],
-        permissions: [
-          {
-            actions: ["bedrock:InvokeModel"],
-            resources: ["*"]
-          }
-        ],
+        
+      permissions: [
+        {
+          actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+          resources: [__CLAUDE_HAIKU_ARN],
+        },
+      ],
+    
         environment: {
           MENU_BUCKET_NAME: menuBucket.name,
           PUBLIC_IMAGE_BUCKET_NAME: publicBucket.name,
@@ -104,14 +104,6 @@ export default {
     const webhookFn = new aws.Function("Webhook", {
       handler: "../services/lambda/menu/src/index.webhookHandler",
       runtime: "nodejs20.x",
-      nodejs: {
-        install: [
-          "@aws-sdk/client-bedrock-runtime",
-          "@aws-sdk/client-s3",
-          "@aws-sdk/client-dynamodb",
-          "@aws-sdk/lib-dynamodb"
-        ],
-      },
       link: [menuBucket, publicBucket, stagingBucket, table, gasSecret],
       environment: {
         MENU_BUCKET_NAME: menuBucket.name,
@@ -119,20 +111,18 @@ export default {
         STAGING_IMAGE_BUCKET_NAME: stagingBucket.name,
         SHEET_TABLE_NAME: table.name,
         GAS_WEBHOOK_SECRET: gasSecret.value,
+        BEDROCK_MODEL_EMBEDDING:
+          process.env.BEDROCK_MODEL_EMBEDDING ?? "amazon.titan-embed-text-v2:0",
+        EMBEDDING_KEY: process.env.EMBEDDING_KEY ?? 'embeddings.json'
       },
+      permissions: [
+        { actions: ["bedrock:InvokeModel"], resources: [__TITAN_EMBED_ARN] }
+      ]
     });
 
     const syncFn = new aws.Function("SyncMenu", {
       handler: "../services/lambda/menu/src/index.syncMenuHandler",
       runtime: "nodejs20.x",
-      nodejs: {
-        install: [
-          "@aws-sdk/client-bedrock-runtime",
-          "@aws-sdk/client-s3",
-          "@aws-sdk/client-dynamodb",
-          "@aws-sdk/lib-dynamodb"
-        ],
-      },
       link: [menuBucket, publicBucket, stagingBucket, table, gasSecret],
       environment: {
         MENU_BUCKET_NAME: menuBucket.name,
@@ -140,7 +130,13 @@ export default {
         STAGING_IMAGE_BUCKET_NAME: stagingBucket.name,
         SHEET_TABLE_NAME: table.name,
         GAS_WEBHOOK_SECRET: gasSecret.value,
+        BEDROCK_MODEL_EMBEDDING:
+          process.env.BEDROCK_MODEL_EMBEDDING ?? "amazon.titan-embed-text-v2:0",
+        EMBEDDING_KEY: process.env.EMBEDDING_KEY ?? 'embeddings.json'
       },
+      permissions: [
+        { actions: ["bedrock:InvokeModel"], resources: [__TITAN_EMBED_ARN] }
+      ]
     });
 
     // ステップ3: Recommend Lambda とルート（最小）
@@ -153,34 +149,41 @@ export default {
     const recommendFn = new aws.Function("Recommend", {
       handler: "../services/lambda/recommend/src/index.handler",
       runtime: "nodejs20.x",
-      nodejs: {
-        install: [
-          "@aws-sdk/client-bedrock-runtime",
-          "@aws-sdk/client-s3"
-        ],
-      },
       link: [menuBucket],
+      permissions: [{ actions: ["bedrock:InvokeModel"], resources: [__TITAN_EMBED_ARN] }],
       environment: recommendEnv,
+    });
+
+    const aiSuggestionsFn = new aws.Function("AiSuggestions", {
+      handler: "../services/lambda/menu/src/index.aiSuggestionsHandler",
+      runtime: "nodejs20.x",
+      link: [table],
+      environment: {
+        SHEET_TABLE_NAME: table.name,
+        GAS_WEBHOOK_SECRET: gasSecret.value,
+      }
     });
 
     // 既存 API に POST /recommend /webhook を追加（既存関数を呼び出し）
     api.route("POST /recommend", recommendFn.arn);
     api.route("POST /webhook", webhookFn.arn);
     api.route("POST /sync/menu", syncFn.arn);
+  api.route("GET /ai/suggestions", aiSuggestionsFn.arn);
 
     // ステップ6: Next.js サイト（CloudFront 配信）
     const menuJsonUrl = menuBucket.domain.apply(
-      (domain) => `https://${domain}/menu.json`,
+      (domain: string) => `https://${domain}/menu.json`,
     );
-    const recommendUrl = api.url.apply((url) => `${url}/recommend`);
+    const recommendUrl = api.url.apply((url: string) => `${url}/recommend`);
 
     const site = new aws.Nextjs("Frontend", {
       path: "../apps/frontend",
+      // nodejs.install を利用せず OpenNext の標準 bundling に任せる
       environment: {
         NEXT_PUBLIC_MENU_JSON_URL: menuJsonUrl,
         NEXT_PUBLIC_RECOMMEND_API: recommendUrl,
         NEXT_PUBLIC_MAKERS_JSON_URL: menuBucket.domain.apply(
-          (domain) => `https://${domain}/makers.json`
+          (domain: string) => `https://${domain}/makers.json`
         ),
       },
     });
@@ -194,7 +197,7 @@ export default {
       RecommendFunction: recommendFn.arn,
       WebhookFunction: webhookFn.arn,
       GenerateMenuFunction: generateMenu.arn,
-      FrontendUrl: site.url,
+  FrontendUrl: site.url,
     } as const;
   },
 };

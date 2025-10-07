@@ -1,5 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, ScheduledEvent } from 'aws-lambda';
-import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+// @ts-ignore Node types are provided via root config
+import { InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'; // kept if future streaming needed
+import { invokeClaude as invokeClaudeCommon, logBedrockEnv, createEmbedding } from '@bar-ease/common';
 import { CopyObjectCommand, DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, DeleteCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
@@ -12,8 +14,10 @@ const STAGING_BUCKET_NAME = process.env.STAGING_IMAGE_BUCKET_NAME as string;
 const PUBLIC_BUCKET_NAME = process.env.PUBLIC_IMAGE_BUCKET_NAME as string;
 const CLAUDE_MODEL_ID = process.env.BEDROCK_MODEL_CLAUDE as string;
 const TABLE_NAME = process.env.SHEET_TABLE_NAME as string;
+const EMBEDDING_MODEL_ID = process.env.BEDROCK_MODEL_EMBEDDING as string | undefined;
+const EMBEDDING_KEY = process.env.EMBEDDING_KEY ?? 'embeddings.json';
 
-const bedrockClient = new BedrockRuntimeClient({ region: REGION });
+// Bedrock client removed – handled in common wrapper
 const s3Client = new S3Client({ region: REGION });
 const dynamoClient = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }));
 
@@ -33,7 +37,7 @@ type SyncItemInput = SheetRow & {
   publicKey?: string;
 };
 
-const SYNC_FIELD_NAMES: Array<keyof SyncItemInput> = [
+const SYNC_FIELD_NAMES = [
   'name',
   'status',
   'maker',
@@ -66,7 +70,9 @@ const SYNC_FIELD_NAMES: Array<keyof SyncItemInput> = [
   'notes',
   'stagingKey',
   'publicKey'
-];
+] as const;
+
+type SyncFieldName = typeof SYNC_FIELD_NAMES[number];
 
 function buildSortKey(id: string) {
   return `${SHEET_SK_PREFIX}${id}`;
@@ -229,51 +235,30 @@ async function upsertSheetItem(item: SyncItemInput) {
     return false;
   })();
 
-  const assign = (field: keyof SyncItemInput, value: unknown) => {
-    const nameKey = `#${field}`;
-    const valueKey = `:${field}`;
-    names[nameKey] = field as string;
-
+  for (const field of SYNC_FIELD_NAMES) {
+    const fieldName = field;
+    if (!Object.prototype.hasOwnProperty.call(item, fieldName)) continue;
+    const nameKey = `#${fieldName}`;
+    const valueKey = `:${fieldName}`;
+    names[nameKey] = fieldName;
+  let value: unknown = (item as unknown as Record<string, unknown>)[fieldName];
+    if (fieldName === 'imageUrl' && clearImage) {
+      value = '';
+      shouldRegenerate = true;
+    }
     if (value === undefined || value === null || value === '') {
       removeClauses.push(nameKey);
-      return;
+      continue;
     }
-
-    if (field === 'tags') {
-      values[valueKey] = Array.isArray(value) ? value : parseTags(String(value));
-    } else if (field === 'price30ml' || field === 'price15ml' || field === 'price10ml') {
-      values[valueKey] = typeof value === 'number' ? value : String(value);
-    } else if (field === 'availableBottles' || field === 'alcoholVolume') {
-      values[valueKey] = typeof value === 'number' ? value : String(value);
-    } else {
-      values[valueKey] = value;
+    if (fieldName === 'tags') {
+      value = Array.isArray(value) ? value : parseTags(String(value));
+    } else if (['price30ml', 'price15ml', 'price10ml'].includes(fieldName)) {
+      value = typeof value === 'number' ? value : Number(String(value).replace(/[^0-9.]/g, ''));
+    } else if (['availableBottles', 'alcoholVolume'].includes(fieldName)) {
+      value = typeof value === 'number' ? value : Number(String(value).replace(/[^0-9.]/g, ''));
     }
-
+    values[valueKey] = value;
     setClauses.push(`${nameKey} = ${valueKey}`);
-  };
-
-  for (const field of SYNC_FIELD_NAMES) {
-    if (field === 'imageUrl') {
-      if (clearImage || Object.prototype.hasOwnProperty.call(item, field)) {
-        const value = clearImage ? '' : (item as Record<string, unknown>)[field];
-        assign(field, value);
-        if (clearImage) {
-          shouldRegenerate = true;
-        }
-      }
-      continue;
-    }
-
-    if (!Object.prototype.hasOwnProperty.call(item, field)) {
-      continue;
-    }
-
-    if (field === 'tags') {
-      assign(field, item.tags);
-      continue;
-    }
-
-    assign(field, (item as Record<string, unknown>)[field]);
   }
 
   await dynamoClient.send(
@@ -458,35 +443,9 @@ ${JSON.stringify(row, null, 2)}
 `;
 }
 
+// Legacy inline invokeClaude replaced with common wrapper for consistency & error handling
 async function invokeClaude(prompt: string) {
-  const command = new InvokeModelCommand({
-    modelId: CLAUDE_MODEL_ID,
-    contentType: 'application/json',
-    accept: 'application/json',
-    body: JSON.stringify({
-      anthropic_version: 'bedrock-2023-05-31',
-      max_tokens: 1024,
-      temperature: 0.3,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: prompt
-            }
-          ]
-        }
-      ]
-    })
-  });
-
-  const response = await bedrockClient.send(command);
-  const payload = JSON.parse(Buffer.from(response.body).toString('utf-8')) as {
-    content: Array<{ text: string }>;
-  };
-
-  return payload.content.map((item) => item.text).join('\n');
+  return invokeClaudeCommon({ modelId: CLAUDE_MODEL_ID, input: prompt, temperature: 0.3, maxTokens: 1024 });
 }
 
 function parseClaudeJson(text: string) {
@@ -663,7 +622,6 @@ async function putMenuJson(items: MenuItem[]) {
     total: items.length,
     updatedAt: new Date().toISOString()
   };
-
   console.log('[generateMenu] putMenuJson start', payload.total);
   await s3Client.send(
     new PutObjectCommand({
@@ -677,8 +635,37 @@ async function putMenuJson(items: MenuItem[]) {
   console.log('[generateMenu] putMenuJson done');
 }
 
+async function generateEmbeddings(items: MenuItem[]) {
+  console.log('[generateMenu] embeddings start');
+  const records: { id: string; vector: number[] }[] = [];
+  for (const item of items) {
+    if (!item.id) continue;
+    const text = [item.name, item.description, (item.tags || []).join(',' )]
+      .filter(Boolean)
+      .join(' \n ')
+      .slice(0, 4000); // safety truncate
+    try {
+      const vector = await createEmbedding({ modelId: EMBEDDING_MODEL_ID, text });
+      records.push({ id: item.id, vector });
+    } catch (error) {
+      console.error('[generateMenu] embedding failed', { id: item.id, error });
+    }
+  }
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: MENU_BUCKET_NAME,
+      Key: EMBEDDING_KEY,
+      Body: JSON.stringify(records),
+      ContentType: 'application/json',
+      CacheControl: 'max-age=300, s-maxage=600'
+    })
+  );
+  console.log('[generateMenu] embeddings done', { total: records.length });
+}
+
 export async function nightlyCompletionHandler(event: ScheduledEvent) {
   console.log('nightlyCompletionHandler invoked', JSON.stringify(event));
+  logBedrockEnv();
   const rows = await querySheetRows();
   const targets = rows.filter((row) => row.aiStatus !== 'Approved');
 
@@ -711,6 +698,7 @@ export async function generateMenuHandler() {
 
   console.log('[generateMenu] filtered items', items.length);
   await putMenuJson(items);
+  await generateEmbeddings(items);
   console.log('[generateMenu] put complete');
   return { statusCode: 200, body: JSON.stringify({ total: items.length }) };
 }
@@ -827,7 +815,7 @@ export async function syncMenuHandler(event: APIGatewayProxyEventV2): Promise<AP
     }
 
     if (shouldRegenerate) {
-      await generateMenuHandler();
+      await generateMenuHandler(); // includes embeddings
     }
 
     return {
@@ -837,6 +825,36 @@ export async function syncMenuHandler(event: APIGatewayProxyEventV2): Promise<AP
   } catch (error) {
     console.error('[sync] error', error);
     return { statusCode: 500, body: JSON.stringify({ error: (error as Error).message }) };
+  }
+}
+
+// === AI候補一覧取得 (GAS Pull 用) ===
+export async function aiSuggestionsHandler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  try {
+    const signature = event.headers['x-signature'] ?? event.headers['X-Signature'];
+    const timestamp = event.headers['x-timestamp'] ?? event.headers['X-Timestamp'];
+    if (!signature || !(await verifySignature(signature, 'GET', timestamp))) {
+      return { statusCode: 401, body: JSON.stringify({ message: 'invalid signature' }) };
+    }
+
+    const rows = await querySheetRows();
+    const suggestions = rows
+      .filter((r) => (r as any).aiStatus !== 'Approved')
+      .map((r) => ({
+        id: (r as any).id,
+        aiSuggestedDescription: (r as any).aiSuggestedDescription || null,
+        aiSuggestedImageUrl: (r as any).aiSuggestedImageUrl || null,
+        aiStatus: (r as any).aiStatus || 'None'
+      }))
+      .filter((s) => s.id);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ items: suggestions, total: suggestions.length })
+    };
+  } catch (error) {
+    console.error('[aiSuggestions] error', error);
+    return { statusCode: 500, body: JSON.stringify({ message: 'internal error' }) };
   }
 }
 
@@ -860,7 +878,10 @@ async function verifySignature(signature: string, body: string, timestampHeader?
   if (expected.length !== actual.length) {
     return false;
   }
-  return crypto.timingSafeEqual(actual, expected);
+  // Normalize to Uint8Array for typings compatibility under NodeNext
+  const a = new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
+  const b = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
+  return crypto.timingSafeEqual(a, b);
 }
 
 export type Handlers =

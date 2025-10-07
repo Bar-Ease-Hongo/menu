@@ -1,16 +1,18 @@
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
-import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+// Bedrock runtime handled via common wrapper
+import { createEmbedding, logBedrockEnv } from '@bar-ease/common';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 import type { MenuItem, RecommendRequestBody, RecommendResponseBody } from '@bar-ease/core';
 
 const REGION = process.env.AWS_REGION ?? 'ap-northeast-1';
-const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_EMBEDDING as string;
+// modelId は共通ラッパで解決。必要であれば env 上書き可
+const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_EMBEDDING as string | undefined;
 const MENU_BUCKET_NAME = process.env.MENU_BUCKET_NAME as string;
 const EMBEDDING_KEY = process.env.EMBEDDING_KEY ?? 'embeddings.json';
 
 const s3Client = new S3Client({ region: REGION });
-const bedrockClient = new BedrockRuntimeClient({ region: REGION });
+// Bedrock client は共通モジュール内部
 
 interface EmbeddingRecord {
   id: string;
@@ -36,23 +38,7 @@ async function fetchMenu(): Promise<MenuItem[]> {
   return menu.items;
 }
 
-async function createEmbedding(text: string) {
-  const command = new InvokeModelCommand({
-    modelId: BEDROCK_MODEL_ID,
-    contentType: 'application/json',
-    accept: 'application/json',
-    body: JSON.stringify({
-      inputText: text
-    })
-  });
-
-  const response = await bedrockClient.send(command);
-  const payload = JSON.parse(Buffer.from(response.body).toString('utf-8')) as {
-    embedding: number[];
-  };
-
-  return payload.embedding;
-}
+// createEmbedding は共通モジュール版を利用
 
 function cosineSimilarity(a: number[], b: number[]) {
   const dot = a.reduce((sum, value, index) => sum + value * b[index], 0);
@@ -100,7 +86,8 @@ export async function handler(event: APIGatewayProxyEventV2) {
   const [menuItems, embeddings] = await Promise.all([fetchMenu(), fetchEmbeddings()]);
   const approvedItems = menuItems.filter((item) => item.status === 'Published' && item.aiStatus === 'Approved');
 
-  const userVector = await createEmbedding(body.text);
+  logBedrockEnv();
+  const userVector = await createEmbedding({ modelId: BEDROCK_MODEL_ID, text: body.text });
   const itemsWithVectors = approvedItems
     .map((item) => {
       const record = embeddings.find((embedding) => embedding.id === item.id);

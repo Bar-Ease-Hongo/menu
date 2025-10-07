@@ -8,10 +8,13 @@
     "strict": true,
     "noEmit": true,
     "moduleResolution": "NodeNext",
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@bar-ease/core": ["packages/core/src/index.ts"],
       "@bar-ease/core/*": ["packages/core/src/*"],
+      "@bar-ease/common": ["packages/common/src/index.ts"],
+      "@bar-ease/common/*": ["packages/common/src/*"],
       "@bar-ease/menu/*": ["services/lambda/menu/*"],
       "@bar-ease/recommend/*": ["services/lambda/recommend/*"]
     }

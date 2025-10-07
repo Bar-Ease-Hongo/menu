@@ -2,4 +2,5 @@ packages:
   - infra
   - apps/*
   - services/*
+  - services/**/*
   - packages/*

@@ -476,3 +476,119 @@ function scheduledSyncTrigger() {
 function manualSync() {
   syncSheetState();
 }
+
+/**
+ * AI候補 (説明文 / 画像URL) を API から取得してシートへ反映します (Pattern A: GAS Pull)。
+ * 上書きポリシー: 既存セルが空の場合のみ書き込み (options.overwrite = true で強制上書き)。
+ * 必要なスクリプトプロパティ: AI_SUGGESTIONS_URL, WEBHOOK_SECRET (既存と同じ鍵を利用)。
+ */
+function fetchAiSuggestions(options) {
+  var overwrite = options && options.overwrite === true;
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    Logger.log('No data rows.');
+    return { updated: 0, total: 0 };
+  }
+
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var colIndex = function(name) { return headers.indexOf(name) + 1; };
+  var colId = colIndex('ID');
+  var colAiDesc = colIndex('AI候補説明文');
+  var colAiImg = colIndex('AI候補画像URL');
+  var colAiStatus = colIndex('AIステータス');
+  if (!colId || !colAiDesc || !colAiImg || !colAiStatus) {
+    throw new Error('必要列(ID/AI候補説明文/AI候補画像URL/AIステータス) が不足しています');
+  }
+
+  var secret = getProp('WEBHOOK_SECRET'); // POST と同一シークレットを利用
+  var url = getProp('AI_SUGGESTIONS_URL');
+
+  var resp = callSignedGet(url, secret);
+  var code = resp.getResponseCode();
+  if (Math.floor(code / 100) !== 2) {
+    Logger.log('fetchAiSuggestions non-2xx: ' + code + ' ' + resp.getContentText());
+    throw new Error('AI suggestions API error ' + code);
+  }
+
+  var json;
+  try {
+    json = JSON.parse(resp.getContentText());
+  } catch (e) {
+    throw new Error('JSON parse error: ' + e);
+  }
+  var items = (json && json.items) || [];
+  if (!Array.isArray(items)) items = [];
+
+  // ID -> row index map 作成
+  var idValues = sheet.getRange(2, colId, lastRow - 1, 1).getValues();
+  var idToRow = {};
+  for (var i = 0; i < idValues.length; i++) {
+    var id = String(idValues[i][0] || '').trim();
+    if (id) idToRow[id] = i + 2; // row number
+  }
+
+  var updated = 0;
+  items.forEach(function(item) {
+    var id = String(item.id || '').trim();
+    if (!id) return;
+    var row = idToRow[id];
+    if (!row) return; // シート上にまだ無い
+
+    var currentStatus = sheet.getRange(row, colAiStatus).getValue();
+    if (currentStatus === 'Approved') return; // 承認済はスキップ
+
+    var curDesc = sheet.getRange(row, colAiDesc).getValue();
+    var curImg = sheet.getRange(row, colAiImg).getValue();
+
+    var nextDesc = item.aiSuggestedDescription || '';
+    var nextImg = item.aiSuggestedImageUrl || '';
+
+    var willWrite = false;
+    if (nextDesc && (overwrite || !curDesc)) {
+      sheet.getRange(row, colAiDesc).setValue(nextDesc);
+      willWrite = true;
+    }
+    if (nextImg && (overwrite || !curImg)) {
+      sheet.getRange(row, colAiImg).setValue(nextImg);
+      willWrite = true;
+    }
+    if (willWrite) {
+      // AIステータスが空 or None の場合は NeedsReview に揃える
+      if (!currentStatus || currentStatus === 'None') {
+        sheet.getRange(row, colAiStatus).setValue('NeedsReview');
+      }
+      updated++;
+    }
+  });
+
+  SpreadsheetApp.flush();
+  Logger.log('AI suggestions fetched. total=' + items.length + ' updated=' + updated);
+  return { updated: updated, total: items.length };
+}
+
+// Apps Script エディタから直接実行する手動用ラッパ
+function manualFetchAiSuggestions() {
+  return fetchAiSuggestions({ overwrite: false });
+}
+
+// GET 用 HMAC 署名呼び出し
+function callSignedGet(url, secret) {
+  var timestamp = String(Date.now());
+  var trimmedSecret = String(secret).trim();
+  var sigBytes = Utilities.computeHmacSignature(
+    Utilities.MacAlgorithm.HMAC_SHA_256,
+    Utilities.newBlob(timestamp + '.GET', Utilities.Charset.UTF_8).getBytes(),
+    Utilities.newBlob(trimmedSecret, Utilities.Charset.UTF_8).getBytes()
+  );
+  var sig = sigBytes.map(function(b){ return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
+  var options = {
+    method: 'get',
+    headers: {
+      'X-Timestamp': timestamp,
+      'X-Signature': sig
+    },
+    muteHttpExceptions: true
+  };
+  return UrlFetchApp.fetch(url, options);
+}

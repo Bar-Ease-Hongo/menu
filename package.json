@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "packageManager": "pnpm@9.12.3",
   "engines": {
-    "node": "22.20.0"
+    "node": "20.12.2"
   },
   "workspaces": [
     "apps/*",
@@ -26,6 +26,17 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
-    "prettier": "3.2.5"
+    "prettier": "3.2.5",
+    "esbuild": "0.19.12",
+    "@opennextjs/aws": "3.6.6",
+    "@aws-sdk/client-bedrock-runtime": "3.540.0",
+    "@aws-sdk/client-s3": "3.540.0",
+    "@aws-sdk/client-dynamodb": "3.540.0",
+    "@aws-sdk/lib-dynamodb": "3.540.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "0.19.12"
+    }
   }
 }
