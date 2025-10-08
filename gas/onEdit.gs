@@ -1,594 +1,683 @@
 /**
- * メニュー用シートの初期設定
- *  - 論理名ヘッダの列を追加（既にあればスキップ）
- *  - ID列を上から順に採番（ITEM0001 形式）
- *  - 承認フラグ列にプルダウンを設定（-, 承認, 却下）
- *  - 保護対象列を警告付きの保護に設定（エディタは手動で追加）
+ * Bar Ease Hongo メニュー管理スプレッドシート
+ * 新フロー: AI補完依頼・公開情報承認はボタン方式、source/published 分離
  */
+
+// ===== 列定義 =====
+// 既存列（元情報）は維持、右端に優先公開情報列群を追加
+const EXISTING_HEADERS = [
+  '国', '製造会社', '販売会社', '蒸溜所', 'タイプ', '樽番号', '商品名', '備考',
+  '熟成地', '樽種', '熟成期間', '現行', 'ピート感', '度数', '本数',
+  '30ml', '15ml', '10ml'
+]; // ※実際のシートの列順に合わせて調整してください
+
+const NEW_HEADERS = [
+  '公開商品名', '公開メーカー', '公開カテゴリ', '公開タグ', '公開説明文',
+  '公開度数', '公開画像URL',
+  'AI補完依頼', 'AI補完済み', '公開状態', '表示情報',
+  'ID', '更新日時'
+];
+
+const PROTECTED_HEADERS = [
+  'AI補完依頼', 'AI補完済み', '公開状態', '表示情報', 'ID', '更新日時'
+];
+
+// ===== Script Properties キー =====
+const PROP_WEBHOOK_SECRET = 'WEBHOOK_SECRET';
+const PROP_AI_REQUEST_URL = 'AI_REQUEST_URL';
+const PROP_WEBHOOK_URL = 'WEBHOOK_URL';
+const PROP_AI_RESULT_URL = 'AI_RESULT_URL';
+
+// ===== 初期設定 =====
 function setupMenuSheet() {
   const sheet = SpreadsheetApp.getActiveSheet();
 
-  // 追加したい列（論理名）
-  const NEW_HEADERS = [
-    'ID',
-    '公開状態',
-    'メーカー',
-    'メーカー（スラッグ）',
-    'カテゴリ',
-    'タグ',
-    '説明文',
-    'AI候補説明文',
-    'AI候補画像URL',
-    '公開画像URL',
-    'AIステータス',
-    '承認フラグ',
-    '承認者',
-    '承認日時',
-    '更新日時'
-  ];
-
-  // 保護したい列（必要に応じて調整してください）
-  const PROTECTED_HEADERS = [
-    'ID',
-    '公開画像URL',
-    'AIステータス',
-    '承認者',
-    '承認日時',
-    '更新日時'
-  ];
-
-  // 1. 現在のヘッダを取得
-  const currentHeaders =
-    sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-
-  // 2. 追加すべきヘッダだけ右端に追加
-  const missing = NEW_HEADERS.filter((name) => !currentHeaders.includes(name));
+  // 既存列はそのまま、右端に新規列を追加
+  const currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const missing = NEW_HEADERS.filter(name => !currentHeaders.includes(name));
+  
   if (missing.length > 0) {
     sheet.insertColumnsAfter(sheet.getLastColumn(), missing.length);
-    sheet
-      .getRange(1, currentHeaders.length + 1, 1, missing.length)
-      .setValues([missing]);
+    sheet.getRange(1, currentHeaders.length + 1, 1, missing.length).setValues([missing]);
   }
 
-  // 再取得して列番号を引けるようにする
-  const headers =
-    sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  // 再取得
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const colIndex = (name) => {
     const idx = headers.indexOf(name);
-    if (idx === -1) {
-      throw new Error(`${name} 列が見つかりません。`);
-    }
-    return idx + 1; // 1-based
+    if (idx === -1) throw new Error(`${name} 列が見つかりません`);
+    return idx + 1;
   };
-
-  // 3. ID列に採番
+  
+  // ID 自動採番（8桁ゼロパディング）
   const colId = colIndex('ID');
   const lastRow = sheet.getLastRow();
   if (lastRow >= 2) {
-    const idRange = sheet.getRange(2, colId, lastRow - 1, 1);
-    const idValues = idRange.getValues();
-    for (let i = 0; i < idValues.length; i++) {
-      if (!idValues[i][0]) {
-        const rowNumber = i + 2; // 2行目が ITEM0001
-        idValues[i][0] = Utilities.formatString('ITEM%04d', rowNumber - 1);
+    const ids = sheet.getRange(2, colId, lastRow - 1, 1).getValues().flat();
+    let maxId = 0;
+    ids.forEach(id => {
+      if (id) {
+        const numMatch = String(id).match(/\d+/);
+        if (numMatch) {
+          maxId = Math.max(maxId, parseInt(numMatch[0]));
+        }
+      }
+    });
+    
+    for (let i = 2; i <= lastRow; i++) {
+      const idVal = sheet.getRange(i, colId).getValue();
+      if (!idVal) {
+        maxId++;
+        const newId = String(maxId).padStart(8, '0');
+        sheet.getRange(i, colId).setValue(newId);
       }
     }
-    idRange.setValues(idValues);
   }
-
-  // 4. 公開状態列にプルダウン設定（Published/Draft）
-  const maxRows = sheet.getMaxRows();
-  const colStatus = colIndex('公開状態');
-  const statusRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(['公開', '下書き'], true)
-    .setAllowInvalid(false)
-    .build();
-  sheet.getRange(2, colStatus, maxRows - 1, 1).setDataValidation(statusRule);
-
-  // 5. 承認フラグ列にプルダウン設定
-  const colApprove = colIndex('承認フラグ');
-  const approveRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(['-', '承認', '却下'], true)
-    .setAllowInvalid(false)
-    .build();
-  sheet.getRange(2, colApprove, maxRows - 1, 1).setDataValidation(approveRule);
-
-  // 6. 保護対象列の保護（警告のみ）
+  
+  // 保護列の設定
   protectColumns(sheet, headers, PROTECTED_HEADERS);
 
   SpreadsheetApp.flush();
-  Logger.log('シートのセットアップが完了しました。');
+  Logger.log('セットアップ完了');
 }
 
-/**
- * 指定したヘッダ列を警告保護します。
- * 実際に編集者を制限したい場合は、保護設定画面から編集者を追加してください。
- */
 function protectColumns(sheet, headers, names) {
   const protections = sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE);
-  names.forEach((name) => {
+  names.forEach(name => {
     const idx = headers.indexOf(name);
     if (idx === -1) return;
     const column = idx + 1;
     const range = sheet.getRange(1, column, sheet.getMaxRows());
 
-    // 既存保護（同じ説明のもの）があれば削除
     protections
-      .filter((p) => p.getDescription() === `${name} 列保護`)
-      .forEach((p) => p.remove());
+      .filter(p => p.getDescription() === `${name} 列保護`)
+      .forEach(p => p.remove());
 
     const protection = range.protect();
     protection.setDescription(`${name} 列保護`);
-    protection.setWarningOnly(true); // 必要なら false に変更して編集者を設定
+    protection.setWarningOnly(true);
   });
 }
 
+// ===== カスタムメニュー =====
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('Bar Ease Hongo')
+    .addItem('AI補完を実行 (1行のみ)', 'requestAiCompletion')
+    .addItem('元の情報で公開 (1行のみ)', 'publishWithSource')
+    .addItem('AI補完情報で公開 (1行のみ)', 'publishWithPublished')
+    .addItem('公開を停止 (1行のみ)', 'unpublishInfo')
+    .addSeparator()
+    .addItem('データ修復 (全体)', 'forceSync')
+    .addItem('最新情報を取得 (全体)', 'fetchLatestInfo')
+    .addSeparator()
+    .addItem('設定を確認', 'checkSettings')
+    .addToUi();
+}
+
+// ===== onEdit トリガー（優先公開列編集時に公開状態をクリア＋ID自動採番） =====
 function handleSheetEdit(e) {
-  try {
     if (!e || !e.range) return;
 
     const sheet = e.source.getActiveSheet();
-    const editedRow = e.range.getRow();
-    const editedCol = e.range.getColumn();
-    const newValue = e.value ?? '';
-
-    if (editedRow <= 1) return;
-
-    const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    const idx = (name) => header.indexOf(name) + 1;
-
-    const colId = idx('ID');
-    if (!colId) return;
-
-    const idCell = sheet.getRange(editedRow, colId).getValue();
-    const itemId = String(idCell || '').trim();
-    if (!itemId) return;
-
-    const colName = idx('商品名');
-    const colApprove = idx('承認フラグ');
-    const colAiStatus = idx('AIステータス');
-    const colStagingKey = idx('AI候補画像URL');
-    const colPublicKey = idx('公開画像URL');
-    const colPublicImageUrl = idx('公開画像確定URL');
-    const colApprovedBy = idx('承認者');
-    const colApprovedAt = idx('承認日時');
-
-    const secret = getProp('WEBHOOK_SECRET');
-    const webhookUrl = getProp('WEBHOOK_URL');
-    const syncUrl = getProp('SYNC_URL');
-
-    if (colName && editedCol === colName) {
-      if (colApprove) {
-        const cell = sheet.getRange(editedRow, colApprove);
-        if (cell.getValue() !== '-') {
-          cell.setValue('-');
-        }
-      }
-      if (colAiStatus) {
-        const cell = sheet.getRange(editedRow, colAiStatus);
-        if (cell.getValue() !== 'NeedsReview') {
-          cell.setValue('NeedsReview');
-        }
-      }
-      if (colPublicKey) {
-        const cell = sheet.getRange(editedRow, colPublicKey);
-        if (cell.getValue()) {
-          cell.setValue('');
-        }
-      }
-      if (colPublicImageUrl) {
-        const cell = sheet.getRange(editedRow, colPublicImageUrl);
-        if (cell.getValue()) {
-          cell.setValue('');
-        }
-      }
-    }
-
-    let approved = false;
-    if (colApprove && editedCol === colApprove && newValue === '承認') {
-      const stagingKeyValue = colStagingKey ? sheet.getRange(editedRow, colStagingKey).getValue() : '';
-      const publicKeyValue = colPublicKey ? sheet.getRange(editedRow, colPublicKey).getValue() : '';
-      const payload = {
-        itemId,
-        stagingKey: String(stagingKeyValue || ''),
-        publicKey: String(publicKeyValue || '')
-      };
-      try {
-        callSignedApi(webhookUrl, secret, payload);
-        if (colApprovedBy) {
-          sheet.getRange(editedRow, colApprovedBy).setValue(Session.getActiveUser().getEmail() || 'unknown');
-        }
-        if (colApprovedAt) {
-          sheet.getRange(editedRow, colApprovedAt).setValue(new Date().toISOString());
-        }
-        if (colAiStatus) {
-          sheet.getRange(editedRow, colAiStatus).setValue('Approved');
-        }
-        approved = true;
-      } catch (err) {
-        Logger.log('Webhook call failed: ' + err);
-      }
-    }
-
-    const rowData = collectRowForSync(sheet, editedRow, header);
-    if (rowData) {
-      try {
-        callSignedApi(syncUrl, secret, { action: 'upsert', item: rowData });
-        recordKnownId(rowData.id);
-      } catch (err) {
-        Logger.log('Sync upsert failed: ' + err);
-      }
-
-      if (approved) {
-        const refreshed = collectRowForSync(sheet, editedRow, header);
-        if (refreshed) {
-          try {
-            callSignedApi(syncUrl, secret, { action: 'upsert', item: refreshed });
-          } catch (err) {
-            Logger.log('Sync refresh failed: ' + err);
-          }
-        }
-      }
-    }
-  } catch (err) {
-    Logger.log('handleSheetEdit error: ' + err);
+  const row = e.range.getRow();
+  const col = e.range.getColumn();
+  
+  if (row <= 1) return;
+  
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const colIndex = (name) => headers.indexOf(name) + 1;
+  
+  const colIdStart = colIndex('公開商品名');
+  const colIdEnd = colIndex('公開画像URL');
+  const colPublishStatus = colIndex('公開状態');
+  const colId = colIndex('ID');
+  const colUpdated = colIndex('更新日時');
+  
+  // 優先公開列が編集されたら「公開状態」をクリア
+  if (col >= colIdStart && col <= colIdEnd && colPublishStatus > 0) {
+    sheet.getRange(row, colPublishStatus).setValue('');
   }
-}
-
-function callSignedApi(url, secret, bodyObj) {
-  const body = JSON.stringify(bodyObj);
-  const timestamp = String(Date.now());
-  const trimmedSecret = String(secret).trim();
-
-  const payloadBytes = Utilities.newBlob(timestamp + '.' + body, Utilities.Charset.UTF_8).getBytes();
-  const keyBytes = Utilities.newBlob(trimmedSecret, Utilities.Charset.UTF_8).getBytes();
-  const sigBytes = Utilities.computeHmacSignature(
-    Utilities.MacAlgorithm.HMAC_SHA_256,
-    payloadBytes,
-    keyBytes
-  );
-  const sig = sigBytes
-    .map(function(b) {
-      return ('0' + (b & 0xff).toString(16)).slice(-2);
-    })
-    .join('');
-
-  const options = {
-    method: 'post',
-    payload: body,
-    contentType: 'application/json',
-    headers: {
-      'X-Timestamp': timestamp,
-      'X-Signature': sig
-    },
-    muteHttpExceptions: true
-  };
-  const res = UrlFetchApp.fetch(url, options);
-  if (Math.floor(res.getResponseCode() / 100) !== 2) {
-    Logger.log('Signed API non-2xx: ' + res.getResponseCode() + ' ' + res.getContentText());
-  }
-  return res;
-}
-
-function collectRowForSync(sheet, row, header) {
-  const columnCount = header.length;
-  const values = sheet.getRange(row, 1, 1, columnCount).getValues()[0];
-  const headerIndex = header.reduce((map, name, index) => {
-    map[name] = index;
-    return map;
-  }, {});
-
-  const getCell = (name) => {
-    const index = headerIndex[name];
-    if (index === undefined || index < 0) {
-      return '';
-    }
-    return values[index];
-  };
-
-  const data = {};
-
-  const id = normalizeCell(getCell('ID'));
-  if (!id) {
-    return null;
-  }
-  data.id = id;
-
-  const assign = (field, headerName, normalizer = normalizeCell) => {
-    const value = normalizer(getCell(headerName));
-    data[field] = value;
-  };
-
-  assign('name', '商品名');
-  // 公開状態は日本語 → 英語（Published/Draft）に正規化
-  (function() {
-    var raw = normalizeCell(getCell('公開状態'));
-    var mapped = raw === '公開' ? 'Published' : (raw === '下書き' ? 'Draft' : '');
-    if (mapped) {
-      data.status = mapped;
-    }
-  })();
-  assign('maker', 'メーカー');
-  assign('makerSlug', 'メーカー（スラッグ）');
-  assign('category', 'カテゴリ');
-  assign('tags', 'タグ');
-  assign('description', '説明文');
-  assign('aiSuggestedDescription', 'AI候補説明文');
-
-  const stagingRaw = normalizeCell(getCell('AI候補画像URL'));
-  data.aiSuggestedImageUrl = stagingRaw;
-  data.stagingKey = extractStorageKey(stagingRaw);
-
-  const publicRaw = normalizeCell(getCell('公開画像URL'));
-  data.publicKey = extractStorageKey(publicRaw);
-
-  const publicImageUrl = normalizeCell(getCell('公開画像確定URL'));
-  if (publicImageUrl) {
-    data.imageUrl = publicImageUrl;
-  }
-
-  assign('aiStatus', 'AIステータス');
-  // 承認フラグは日本語 → 英語に正規化
-  (function() {
-    var raw = normalizeCell(getCell('承認フラグ'));
-    var mapped = raw === '承認' ? 'Approved' : (raw === '却下' ? 'Rejected' : '-');
-    data.approveFlag = mapped;
-  })();
-  assign('approvedBy', '承認者');
-  assign('approvedAt', '承認日時');
-  assign('updatedAt', '更新日時');
-  assign('country', '国');
-  assign('manufacturer', '製造会社');
-  assign('distributor', '販売会社');
-  assign('distillery', '蒸溜所');
-  assign('type', 'タイプ');
-  assign('caskNumber', '樽番号');
-  assign('caskType', '樽種');
-  assign('maturationPlace', '熟成地');
-  assign('maturationPeriod', '熟成期間');
-  assign('alcoholVolume', '度数', normalizeNumeric);
-  assign('availableBottles', '本数', normalizeNumeric);
-  assign('price30ml', '30ml', normalizeNumeric);
-  assign('price15ml', '15ml', normalizeNumeric);
-  assign('price10ml', '10ml', normalizeNumeric);
-  assign('notes', '備考');
-
-  return data;
-}
-
-function normalizeCell(value) {
-  if (value === null || value === undefined) {
-    return '';
-  }
-  if (Object.prototype.toString.call(value) === '[object Date]') {
-    return new Date(value.getTime()).toISOString();
-  }
-  return String(value).trim();
-}
-
-function normalizeNumeric(value) {
-  const text = normalizeCell(value);
-  if (!text) return '';
-  return text.replace(/[^0-9.]/g, '');
-}
-
-function extractStorageKey(value) {
-  const text = normalizeCell(value);
-  if (!text) return '';
-  if (/^https?:\/\//i.test(text)) {
-    try {
-      const url = new URL(text);
-      const pathname = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname;
-      return decodeURIComponent(pathname);
-    } catch (err) {
-      Logger.log('extractStorageKey parse error: ' + err);
-      return text;
+  
+  // ID自動採番（新規行）
+  const id = sheet.getRange(row, colId).getValue();
+  if (!id && colId > 0) {
+    const hasData = sheet.getRange(row, 1, 1, colId - 1)
+      .getValues()[0]
+      .some(val => val !== '');
+    
+    if (hasData) {
+      const newId = generateNextId(sheet, headers);
+      sheet.getRange(row, colId).setValue(newId);
     }
   }
-  return text;
-}
-
-function getKnownIds() {
-  const raw = PropertiesService.getScriptProperties().getProperty('SYNC_KNOWN_IDS');
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed;
-    if (parsed && Array.isArray(parsed.ids)) return parsed.ids;
-  } catch (err) {
-    Logger.log('getKnownIds parse error: ' + err);
+  
+  // 更新日時
+  if (colUpdated > 0) {
+    sheet.getRange(row, colUpdated).setValue(new Date().toISOString());
   }
-  return [];
 }
 
-function setKnownIds(ids) {
-  PropertiesService.getScriptProperties().setProperty('SYNC_KNOWN_IDS', JSON.stringify(ids));
-}
-
-function recordKnownId(id) {
-  const current = new Set(getKnownIds());
-  current.add(id);
-  setKnownIds(Array.from(current).sort());
-}
-
-function syncSheetState() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+function generateNextId(sheet, headers) {
+  const colId = headers.indexOf('ID') + 1;
   const lastRow = sheet.getLastRow();
-  const secret = getProp('WEBHOOK_SECRET');
-  const syncUrl = getProp('SYNC_URL');
-
-  const items = [];
-  const currentIds = [];
-
-  for (let row = 2; row <= lastRow; row++) {
-    const rowData = collectRowForSync(sheet, row, header);
-    if (rowData) {
-      items.push(rowData);
-      currentIds.push(String(rowData.id));
-    }
-  }
-
-  const chunkSize = 25;
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize);
-    try {
-      callSignedApi(syncUrl, secret, { action: 'batch', items: chunk });
-    } catch (err) {
-      Logger.log('Sync batch failed: ' + err);
-    }
-  }
-
-  const knownIds = getKnownIds();
-  const removed = knownIds.filter((id) => currentIds.indexOf(id) === -1);
-  if (removed.length > 0) {
-    try {
-      callSignedApi(syncUrl, secret, { action: 'delete', itemIds: removed });
-    } catch (err) {
-      Logger.log('Sync delete failed: ' + err);
-    }
-  }
-
-  setKnownIds(currentIds.sort());
+  if (lastRow < 2) return '00000001';
+  
+  const ids = sheet.getRange(2, colId, lastRow - 1, 1)
+    .getValues()
+    .flat()
+    .filter(id => id)
+    .map(id => {
+      const numMatch = String(id).match(/\d+/);
+      return numMatch ? parseInt(numMatch[0]) : 0;
+    });
+  
+  const maxId = ids.length > 0 ? Math.max(...ids) : 0;
+  const nextId = maxId + 1;
+  return String(nextId).padStart(8, '0');
 }
 
-function hmacHex(secret, data) {
-  const sigBytes = Utilities.computeHmacSha256Signature(data, secret);
-  return sigBytes.map(function(b) {
-    return ('0' + (b & 0xff).toString(16)).slice(-2);
-  }).join('');
-}
-
-function getProp(key) {
-  const value = PropertiesService.getScriptProperties().getProperty(key);
-  if (!value) throw new Error('Script property missing: ' + key);
-  return value;
-}
-
-function scheduledSyncTrigger() {
+// ===== ボタン: AI補完依頼 =====
+function requestAiCompletion() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const activeRange = sheet.getActiveRange();
+  const activeRow = activeRange.getRow();
+  const lastRow = activeRange.getLastRow();
+  
+  if (activeRow <= 1) {
+    SpreadsheetApp.getUi().alert('データ行を選択してください');
+    return;
+  }
+  
+  // 確認ダイアログ
+  let confirmMessage = `AI補完を実行します\n\n対象: ${activeRow}行目\n機能: 欠損値や間違った情報をAIで補完・修正します\n\n⚠️ 注意事項:\n• AI補完は依頼するだけで即時反映されません\n• 完了後は「最新情報を取得」で結果を反映してください\n• 処理には数秒〜数分かかる場合があります\n\n続行しますか？`;
+  
+  // 複数行選択時の警告を追記
+  if (activeRow !== lastRow) {
+    confirmMessage = `AI補完を実行します\n\n⚠️ 複数行が選択されています\n選択範囲: ${activeRow}行目〜${lastRow}行目\n${activeRow}行目のみ処理されます\n\n機能: 欠損値や間違った情報をAIで補完・修正します\n\n⚠️ 注意事項:\n• AI補完は依頼するだけで即時反映されません\n• 完了後は「最新情報を取得」で結果を反映してください\n• 処理には数秒〜数分かかる場合があります\n\n続行しますか？`;
+  }
+  
+  const result = SpreadsheetApp.getUi().alert(
+    'AI補完を実行',
+    confirmMessage,
+    SpreadsheetApp.getUi().ButtonSet.YES_NO
+  );
+  if (result !== SpreadsheetApp.getUi().Button.YES) {
+    return;
+  }
+  
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const colIndex = (name) => headers.indexOf(name) + 1;
+  
+  const colId = colIndex('ID');
+  const colAiReq = colIndex('AI補完依頼');
+  
+  const itemId = sheet.getRange(activeRow, colId).getValue();
+  if (!itemId) {
+    SpreadsheetApp.getUi().alert('IDが見つかりません');
+    return;
+  }
+  
+  // source データ収集
+  const source = collectSourceData(sheet, activeRow, headers);
+  
+  // AI補完依頼を○に
+  sheet.getRange(activeRow, colAiReq).setValue('○');
+  
+  // POST /ai/request
+  const url = PropertiesService.getScriptProperties().getProperty(PROP_AI_REQUEST_URL);
+  const secret = PropertiesService.getScriptProperties().getProperty(PROP_WEBHOOK_SECRET);
+  
+  if (!url || !secret) {
+    SpreadsheetApp.getUi().alert('AI_REQUEST_URL または WEBHOOK_SECRET が未設定です');
+    return;
+  }
+  
+  const payload = {
+    itemId: String(itemId),
+    source: source
+  };
+  
   try {
-    syncSheetState();
-  } catch (err) {
-    Logger.log('scheduledSyncTrigger error: ' + err);
+    callSignedApi(url, payload, secret);
+    SpreadsheetApp.getUi().alert(`AI補完依頼を送信しました (ID: ${itemId})`);
+  } catch (error) {
+    SpreadsheetApp.getUi().alert(`エラー: ${error.message}`);
   }
 }
 
-function manualSync() {
-  syncSheetState();
+function collectSourceData(sheet, row, headers) {
+  const colIndex = (name) => headers.indexOf(name) + 1;
+  
+  return {
+    name: sheet.getRange(row, colIndex('商品名')).getValue() || '',
+    maker: sheet.getRange(row, colIndex('製造会社')).getValue() || '',
+    category: '',
+    tags: sheet.getRange(row, colIndex('ピート感')).getValue() || '',
+    description: '',
+    alcoholVolume: (() => {
+      const value = sheet.getRange(row, colIndex('度数')).getValue();
+      if (!value) return '';
+      // 数値の場合はそのまま、文字列の場合は数値に変換
+      const numeric = typeof value === 'number' ? value : parseFloat(String(value).replace(/[^0-9.]/g, ''));
+      return isNaN(numeric) ? '' : numeric;
+    })(),
+    imageUrl: '',
+    country: sheet.getRange(row, colIndex('国')).getValue() || '',
+    manufacturer: sheet.getRange(row, colIndex('製造会社')).getValue() || '',
+    distributor: sheet.getRange(row, colIndex('販売会社')).getValue() || '',
+    distillery: sheet.getRange(row, colIndex('蒸溜所')).getValue() || '',
+    type: sheet.getRange(row, colIndex('タイプ')).getValue() || '',
+    caskNumber: sheet.getRange(row, colIndex('樽番号')).getValue() || '',
+    caskType: sheet.getRange(row, colIndex('樽種')).getValue() || '',
+    maturationPlace: sheet.getRange(row, colIndex('熟成地')).getValue() || '',
+    maturationPeriod: sheet.getRange(row, colIndex('熟成期間')).getValue() || '',
+    availableBottles: sheet.getRange(row, colIndex('本数')).getValue() || '',
+    price30ml: sheet.getRange(row, colIndex('30ml')).getValue() || '',
+    price15ml: sheet.getRange(row, colIndex('15ml')).getValue() || '',
+    price10ml: sheet.getRange(row, colIndex('10ml')).getValue() || '',
+    notes: sheet.getRange(row, colIndex('備考')).getValue() || ''
+  };
 }
 
-/**
- * AI候補 (説明文 / 画像URL) を API から取得してシートへ反映します (Pattern A: GAS Pull)。
- * 上書きポリシー: 既存セルが空の場合のみ書き込み (options.overwrite = true で強制上書き)。
- * 必要なスクリプトプロパティ: AI_SUGGESTIONS_URL, WEBHOOK_SECRET (既存と同じ鍵を利用)。
- */
-function fetchAiSuggestions(options) {
-  var overwrite = options && options.overwrite === true;
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var lastRow = sheet.getLastRow();
+function collectPublishedData(sheet, row, headers) {
+  const colIndex = (name) => headers.indexOf(name) + 1;
+  
+  return {
+    name: sheet.getRange(row, colIndex('公開商品名')).getValue() || '',
+    maker: sheet.getRange(row, colIndex('公開メーカー')).getValue() || '',
+    category: sheet.getRange(row, colIndex('公開カテゴリ')).getValue() || '',
+    tags: sheet.getRange(row, colIndex('公開タグ')).getValue() || '',
+    description: sheet.getRange(row, colIndex('公開説明文')).getValue() || '',
+    alcoholVolume: sheet.getRange(row, colIndex('公開度数')).getValue() || '',
+    imageUrl: sheet.getRange(row, colIndex('公開画像URL')).getValue() || ''
+  };
+}
+
+// ===== ボタン: 元情報で公開 =====
+function publishWithSource() {
+  publishInfo('公開', '元情報');
+}
+
+// ===== ボタン: 優先公開情報(AI補完情報)で公開 =====
+function publishWithPublished() {
+  publishInfo('公開', '優先公開情報(AI補完情報)');
+}
+
+// ===== ボタン: 公開取りやめ =====
+function unpublishInfo() {
+  publishInfo('非公開', '');
+}
+
+// ===== 共通: 公開処理 =====
+function publishInfo(publishStatus, displayInfo) {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const activeRange = sheet.getActiveRange();
+  const activeRow = activeRange.getRow();
+  const lastRow = activeRange.getLastRow();
+  
+  if (activeRow <= 1) {
+    SpreadsheetApp.getUi().alert('データ行を選択してください');
+    return;
+  }
+  
+  // 確認ダイアログ
+  let actionName = '';
+  let actionDescription = '';
+  let notes = '';
+  
+  if (publishStatus === '公開' && displayInfo === '元情報') {
+    actionName = '元の情報で公開';
+    actionDescription = 'スプレッドシートの元の情報をWebアプリに公開します';
+    notes = '⚠️ 注意事項:\n• 公開後はWebアプリで確認できます\n• 公開状態は「公開」に変更されます\n• 表示情報は「元情報」に設定されます';
+  } else if (publishStatus === '公開' && displayInfo === '優先公開情報(AI補完情報)') {
+    actionName = 'AI補完情報で公開';
+    actionDescription = 'AI補完された情報をWebアプリに公開します';
+    notes = '⚠️ 注意事項:\n• AI補完が完了していない場合は元情報が表示されます\n• 公開後はWebアプリで確認できます\n• 公開状態は「公開」に変更されます\n• 表示情報は「優先公開情報(AI補完情報)」に設定されます';
+  } else if (publishStatus === '非公開') {
+    actionName = '公開を停止';
+    actionDescription = 'Webアプリからの公開を停止します';
+    notes = '⚠️ 注意事項:\n• 公開状態は「非公開」に変更されます\n• Webアプリからは表示されなくなります\n• 表示情報はクリアされます';
+  }
+  
+  let confirmMessage = `${actionName}を実行します\n\n対象: ${activeRow}行目\n機能: ${actionDescription}\n\n${notes}\n\n続行しますか？`;
+  
+  // 複数行選択時の警告を追記
+  if (activeRow !== lastRow) {
+    confirmMessage = `${actionName}を実行します\n\n⚠️ 複数行が選択されています\n選択範囲: ${activeRow}行目〜${lastRow}行目\n${activeRow}行目のみ処理されます\n\n機能: ${actionDescription}\n\n${notes}\n\n続行しますか？`;
+  }
+  
+  const result = SpreadsheetApp.getUi().alert(
+    actionName,
+    confirmMessage,
+    SpreadsheetApp.getUi().ButtonSet.YES_NO
+  );
+  if (result !== SpreadsheetApp.getUi().Button.YES) {
+    return;
+  }
+  
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const colIndex = (name) => headers.indexOf(name) + 1;
+  
+  const colId = colIndex('ID');
+  const colPublishStatus = colIndex('公開状態');
+  const colDisplayInfo = colIndex('表示情報');
+  
+  const itemId = sheet.getRange(activeRow, colId).getValue();
+  if (!itemId) {
+    SpreadsheetApp.getUi().alert('IDが見つかりません');
+    return;
+  }
+  
+  const source = collectSourceData(sheet, activeRow, headers);
+  const published = collectPublishedData(sheet, activeRow, headers);
+  
+  // 公開状態と表示情報を設定
+  sheet.getRange(activeRow, colPublishStatus).setValue(publishStatus);
+  if (displayInfo) {
+    sheet.getRange(activeRow, colDisplayInfo).setValue(displayInfo);
+  }
+  
+  // POST /webhook
+  const url = PropertiesService.getScriptProperties().getProperty(PROP_WEBHOOK_URL);
+  const secret = PropertiesService.getScriptProperties().getProperty(PROP_WEBHOOK_SECRET);
+  
+  if (!url || !secret) {
+    SpreadsheetApp.getUi().alert('WEBHOOK_URL または WEBHOOK_SECRET が未設定です');
+    return;
+  }
+  
+  const payload = {
+    itemId: String(itemId),
+    source: source,
+    published: published,
+    publishStatus: publishStatus,
+    displayInfo: displayInfo
+  };
+  
+  try {
+    callSignedApi(url, payload, secret);
+    const message = publishStatus === '公開' 
+      ? `${displayInfo}で公開しました (ID: ${itemId})`
+      : `公開を取りやめました (ID: ${itemId})`;
+    SpreadsheetApp.getUi().alert(message);
+  } catch (error) {
+    SpreadsheetApp.getUi().alert(`エラー: ${error.message}`);
+  }
+}
+
+// ===== ボタン: 現状強制同期 =====
+function forceSync() {
+  // 確認ダイアログ
+  const result = SpreadsheetApp.getUi().alert(
+    'データ修復',
+    'データ修復を実行します\n\n対象: 全データ\n機能: スプレッドシートとWebアプリのデータを同期・修復します\n\n⚠️ 注意事項:\n• この機能は未実装です\n• データの不整合が発生した場合は管理者に連絡してください\n• 実行しても何も処理されません\n\n続行しますか？',
+    SpreadsheetApp.getUi().ButtonSet.YES_NO
+  );
+  if (result !== SpreadsheetApp.getUi().Button.YES) {
+    return;
+  }
+  
+  // 既存のsyncMenuHandler相当の処理（必要なら実装）
+  SpreadsheetApp.getUi().alert('データ修復は未実装です');
+}
+
+// ===== ボタン: 設定確認 =====
+function checkSettings() {
+  const props = PropertiesService.getScriptProperties();
+  const aiRequestUrl = props.getProperty(PROP_AI_REQUEST_URL);
+  const webhookUrl = props.getProperty(PROP_WEBHOOK_URL);
+  const aiResultUrl = props.getProperty(PROP_AI_RESULT_URL);
+  const webhookSecret = props.getProperty(PROP_WEBHOOK_SECRET);
+  
+  const message = `
+設定状況:
+• AI_REQUEST_URL: ${aiRequestUrl ? '✓ 設定済み' : '✗ 未設定'}
+• WEBHOOK_URL: ${webhookUrl ? '✓ 設定済み' : '✗ 未設定'}
+• AI_RESULT_URL: ${aiResultUrl ? '✓ 設定済み' : '✗ 未設定'}
+• WEBHOOK_SECRET: ${webhookSecret ? '✓ 設定済み' : '✗ 未設定'}
+
+未設定の項目がある場合は、Apps Script エディタで
+「プロジェクトの設定」→「スクリプト プロパティ」から設定してください。
+
+設定例:
+• AI_REQUEST_URL: https://your-api-gateway-url/ai/request
+• WEBHOOK_URL: https://your-api-gateway-url/webhook
+• AI_RESULT_URL: https://your-api-gateway-url/ai/result
+• WEBHOOK_SECRET: your-secret-key
+  `;
+  
+  SpreadsheetApp.getUi().alert(message);
+}
+
+// ===== ボタン: 最新情報取得 =====
+function fetchLatestInfo() {
+  // 確認ダイアログ
+  const result = SpreadsheetApp.getUi().alert(
+    '最新情報を取得',
+    '最新情報を取得を実行します\n\n対象: 全データ\n機能: AI補完結果をスプレッドシートに反映します\n\n⚠️ 注意事項:\n• 完了したAI補完結果のみが反映されます\n• 処理中または未完了のAI補完は反映されません\n• 反映には数秒かかる場合があります\n\n続行しますか？',
+    SpreadsheetApp.getUi().ButtonSet.YES_NO
+  );
+  if (result !== SpreadsheetApp.getUi().Button.YES) {
+    return;
+  }
+  
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const colIndex = (name) => headers.indexOf(name) + 1;
+  
+  const colId = colIndex('ID');
+  const lastRow = sheet.getLastRow();
   if (lastRow < 2) {
-    Logger.log('No data rows.');
-    return { updated: 0, total: 0 };
+    SpreadsheetApp.getUi().alert('データがありません');
+    return;
   }
-
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var colIndex = function(name) { return headers.indexOf(name) + 1; };
-  var colId = colIndex('ID');
-  var colAiDesc = colIndex('AI候補説明文');
-  var colAiImg = colIndex('AI候補画像URL');
-  var colAiStatus = colIndex('AIステータス');
-  if (!colId || !colAiDesc || !colAiImg || !colAiStatus) {
-    throw new Error('必要列(ID/AI候補説明文/AI候補画像URL/AIステータス) が不足しています');
+  
+  const ids = sheet.getRange(2, colId, lastRow - 1, 1)
+    .getValues()
+    .flat()
+    .filter(id => id)
+    .join(',');
+  
+  const url = PropertiesService.getScriptProperties().getProperty(PROP_AI_RESULT_URL);
+  const secret = PropertiesService.getScriptProperties().getProperty(PROP_WEBHOOK_SECRET);
+  
+  if (!url || !secret) {
+    SpreadsheetApp.getUi().alert('AI_RESULT_URL または WEBHOOK_SECRET が未設定です');
+    return;
   }
-
-  var secret = getProp('WEBHOOK_SECRET'); // POST と同一シークレットを利用
-  var url = getProp('AI_SUGGESTIONS_URL');
-
-  var resp = callSignedGet(url, secret);
-  var code = resp.getResponseCode();
-  if (Math.floor(code / 100) !== 2) {
-    Logger.log('fetchAiSuggestions non-2xx: ' + code + ' ' + resp.getContentText());
-    throw new Error('AI suggestions API error ' + code);
-  }
-
-  var json;
+  
   try {
-    json = JSON.parse(resp.getContentText());
-  } catch (e) {
-    throw new Error('JSON parse error: ' + e);
+    const fullUrl = `${url}?ids=${encodeURIComponent(ids)}`;
+    const response = callSignedGet(fullUrl, secret);
+    const data = JSON.parse(response);
+    
+    // シート更新
+    updateSheetFromAiResult(sheet, headers, data.items);
+    SpreadsheetApp.getUi().alert(`最新情報を取得しました (${data.total}件)`);
+  } catch (error) {
+    SpreadsheetApp.getUi().alert(`エラー: ${error.message}`);
   }
-  var items = (json && json.items) || [];
-  if (!Array.isArray(items)) items = [];
+}
 
-  // ID -> row index map 作成
-  var idValues = sheet.getRange(2, colId, lastRow - 1, 1).getValues();
-  var idToRow = {};
-  for (var i = 0; i < idValues.length; i++) {
-    var id = String(idValues[i][0] || '').trim();
-    if (id) idToRow[id] = i + 2; // row number
-  }
-
-  var updated = 0;
-  items.forEach(function(item) {
-    var id = String(item.id || '').trim();
-    if (!id) return;
-    var row = idToRow[id];
-    if (!row) return; // シート上にまだ無い
-
-    var currentStatus = sheet.getRange(row, colAiStatus).getValue();
-    if (currentStatus === 'Approved') return; // 承認済はスキップ
-
-    var curDesc = sheet.getRange(row, colAiDesc).getValue();
-    var curImg = sheet.getRange(row, colAiImg).getValue();
-
-    var nextDesc = item.aiSuggestedDescription || '';
-    var nextImg = item.aiSuggestedImageUrl || '';
-
-    var willWrite = false;
-    if (nextDesc && (overwrite || !curDesc)) {
-      sheet.getRange(row, colAiDesc).setValue(nextDesc);
-      willWrite = true;
+function updateSheetFromAiResult(sheet, headers, items) {
+  const colIndex = (name) => headers.indexOf(name) + 1;
+  const colId = colIndex('ID');
+  const colAiComp = colIndex('AI補完済み');
+  
+  const colPubName = colIndex('公開商品名');
+  const colPubMaker = colIndex('公開メーカー');
+  const colPubCat = colIndex('公開カテゴリ');
+  const colPubTags = colIndex('公開タグ');
+  const colPubDesc = colIndex('公開説明文');
+  const colPubAbv = colIndex('公開度数');
+  const colPubImg = colIndex('公開画像URL');
+  
+  items.forEach(item => {
+    const id = item.id;
+    const row = findRowById(sheet, id, colId);
+    if (!row) return;
+    
+    if (item.flags?.aiCompleted) {
+      sheet.getRange(row, colAiComp).setValue('○');
     }
-    if (nextImg && (overwrite || !curImg)) {
-      sheet.getRange(row, colAiImg).setValue(nextImg);
-      willWrite = true;
-    }
-    if (willWrite) {
-      // AIステータスが空 or None の場合は NeedsReview に揃える
-      if (!currentStatus || currentStatus === 'None') {
-        sheet.getRange(row, colAiStatus).setValue('NeedsReview');
+    
+    // AI補完結果を優先公開列に反映
+    const data = item.published || item.aiSuggested;
+    if (data) {
+      if (data.name) sheet.getRange(row, colPubName).setValue(data.name);
+      if (data.maker) sheet.getRange(row, colPubMaker).setValue(data.maker);
+      if (data.category) sheet.getRange(row, colPubCat).setValue(data.category);
+      if (data.tags) sheet.getRange(row, colPubTags).setValue(data.tags);
+      if (data.description) sheet.getRange(row, colPubDesc).setValue(data.description);
+      if (data.alcoholVolume) {
+        // 度数を文字列として設定（日付フォーマットを防ぐ）
+        // 数値の場合はそのまま、文字列の場合は数値に変換してから%を付ける
+        const abvValue = typeof data.alcoholVolume === 'number' 
+          ? data.alcoholVolume 
+          : parseFloat(String(data.alcoholVolume).replace(/[^0-9.]/g, ''));
+        if (!isNaN(abvValue)) {
+          sheet.getRange(row, colPubAbv).setValue(`${abvValue}%`);
+        }
       }
-      updated++;
+      if (data.imageUrl) sheet.getRange(row, colPubImg).setValue(data.imageUrl);
     }
   });
-
-  SpreadsheetApp.flush();
-  Logger.log('AI suggestions fetched. total=' + items.length + ' updated=' + updated);
-  return { updated: updated, total: items.length };
 }
 
-// Apps Script エディタから直接実行する手動用ラッパ
-function manualFetchAiSuggestions() {
-  return fetchAiSuggestions({ overwrite: false });
+function findRowById(sheet, id, colId) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  
+  const ids = sheet.getRange(2, colId, lastRow - 1, 1).getValues().flat();
+  const idx = ids.findIndex(val => String(val) === String(id));
+  return idx >= 0 ? idx + 2 : null;
 }
 
-// GET 用 HMAC 署名呼び出し
+// ===== Callback 受信（doPost） =====
+function doPost(e) {
+  if (!e || !e.postData) {
+    return ContentService.createTextOutput(JSON.stringify({ error: 'no postData' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  try {
+    const payload = JSON.parse(e.postData.contents);
+    
+    if (payload.type === 'ai_completed') {
+      handleAiCompleted(payload);
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    Logger.log('doPost error: ' + error.message);
+    return ContentService.createTextOutput(JSON.stringify({ error: error.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function handleAiCompleted(payload) {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const colIndex = (name) => headers.indexOf(name) + 1;
+  
+  const colId = colIndex('ID');
+  const colAiComp = colIndex('AI補完済み');
+  
+  const row = findRowById(sheet, payload.itemId, colId);
+  if (!row) return;
+  
+  sheet.getRange(row, colAiComp).setValue('○');
+  
+  if (payload.published) {
+    const pub = payload.published;
+    const colPubName = colIndex('公開商品名');
+    const colPubMaker = colIndex('公開メーカー');
+    const colPubCat = colIndex('公開カテゴリ');
+    const colPubTags = colIndex('公開タグ');
+    const colPubDesc = colIndex('公開説明文');
+    const colPubAbv = colIndex('公開度数');
+    const colPubImg = colIndex('公開画像URL');
+    
+    if (pub.name) sheet.getRange(row, colPubName).setValue(pub.name);
+    if (pub.maker) sheet.getRange(row, colPubMaker).setValue(pub.maker);
+    if (pub.category) sheet.getRange(row, colPubCat).setValue(pub.category);
+    if (pub.tags) sheet.getRange(row, colPubTags).setValue(pub.tags);
+    if (pub.description) sheet.getRange(row, colPubDesc).setValue(pub.description);
+    if (pub.alcoholVolume) {
+      // 度数を文字列として設定（日付フォーマットを防ぐ）
+      const abvValue = typeof pub.alcoholVolume === 'number' 
+        ? pub.alcoholVolume 
+        : parseFloat(String(pub.alcoholVolume).replace(/[^0-9.]/g, ''));
+      if (!isNaN(abvValue)) {
+        sheet.getRange(row, colPubAbv).setValue(`${abvValue}%`);
+      }
+    }
+    if (pub.imageUrl) sheet.getRange(row, colPubImg).setValue(pub.imageUrl);
+  }
+}
+
+// ===== 署名付きAPI呼び出し =====
+function callSignedApi(url, payload, secret) {
+  const timestamp = Date.now();
+  const body = JSON.stringify(payload);
+  const message = timestamp + '.' + body;
+  
+  // messageとsecretをUTF-8バイト配列に変換
+  const messageBytes = Utilities.newBlob(message).getBytes();
+  const secretBytes = Utilities.newBlob(secret).getBytes();
+  
+  const signatureBytes = Utilities.computeHmacSha256Signature(messageBytes, secretBytes);
+  const signature = signatureBytes.map(b => {
+    // バイト値を0-255の範囲に正規化
+    const normalized = b < 0 ? b + 256 : b;
+    // 16進数に変換し、2桁にパディング
+    return normalized.toString(16).padStart(2, '0');
+  }).join('');
+  
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'X-Timestamp': String(timestamp),
+      'X-Signature': signature
+    },
+    payload: body,
+    muteHttpExceptions: true
+  };
+  
+  const response = UrlFetchApp.fetch(url, options);
+  if (response.getResponseCode() >= 400) {
+    throw new Error(`HTTP ${response.getResponseCode()}: ${response.getContentText()}`);
+  }
+  return response.getContentText();
+}
+
 function callSignedGet(url, secret) {
-  var timestamp = String(Date.now());
-  var trimmedSecret = String(secret).trim();
-  var sigBytes = Utilities.computeHmacSignature(
-    Utilities.MacAlgorithm.HMAC_SHA_256,
-    Utilities.newBlob(timestamp + '.GET', Utilities.Charset.UTF_8).getBytes(),
-    Utilities.newBlob(trimmedSecret, Utilities.Charset.UTF_8).getBytes()
-  );
-  var sig = sigBytes.map(function(b){ return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
-  var options = {
+  const timestamp = Date.now();
+  const message = timestamp + '.GET';
+  const signatureBytes = Utilities.computeHmacSha256Signature(message, secret);
+  const signature = signatureBytes.map(b => {
+    // バイト値を0-255の範囲に正規化
+    const normalized = b < 0 ? b + 256 : b;
+    // 16進数に変換し、2桁にパディング
+    return normalized.toString(16).padStart(2, '0');
+  }).join('');
+  
+  const options = {
     method: 'get',
     headers: {
-      'X-Timestamp': timestamp,
-      'X-Signature': sig
+      'X-Timestamp': String(timestamp),
+      'X-Signature': signature
     },
     muteHttpExceptions: true
   };
-  return UrlFetchApp.fetch(url, options);
+  
+  const response = UrlFetchApp.fetch(url, options);
+  if (response.getResponseCode() >= 400) {
+    throw new Error(`HTTP ${response.getResponseCode()}: ${response.getContentText()}`);
+  }
+  return response.getContentText();
 }
+

@@ -154,21 +154,40 @@ export default {
       environment: recommendEnv,
     });
 
-    const aiSuggestionsFn = new aws.Function("AiSuggestions", {
-      handler: "../services/lambda/menu/src/index.aiSuggestionsHandler",
+    const aiRequestFn = new aws.Function("AiRequest", {
+      handler: "../services/lambda/menu/src/index.aiRequestHandler",
       runtime: "nodejs20.x",
-      link: [table],
+      timeout: "60 seconds",
+      link: [menuBucket, publicBucket, stagingBucket, table, gasSecret],
+      environment: {
+        MENU_BUCKET_NAME: menuBucket.name,
+        PUBLIC_IMAGE_BUCKET_NAME: publicBucket.name,
+        STAGING_IMAGE_BUCKET_NAME: stagingBucket.name,
+        SHEET_TABLE_NAME: table.name,
+        GAS_WEBHOOK_SECRET: gasSecret.value,
+        GAS_CALLBACK_URL: process.env.GAS_CALLBACK_URL,
+        BEDROCK_MODEL_CLAUDE: process.env.BEDROCK_MODEL_CLAUDE ?? "anthropic.claude-3-haiku-20240307-v1:0",
+      },
+      permissions: [
+        { actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"], resources: [__CLAUDE_HAIKU_ARN] }
+      ]
+    });
+
+    const aiResultFn = new aws.Function("AiResult", {
+      handler: "../services/lambda/menu/src/index.aiResultHandler",
+      runtime: "nodejs20.x",
+      link: [table, gasSecret],
       environment: {
         SHEET_TABLE_NAME: table.name,
         GAS_WEBHOOK_SECRET: gasSecret.value,
       }
     });
 
-    // 既存 API に POST /recommend /webhook を追加（既存関数を呼び出し）
+    // API ルート定義
     api.route("POST /recommend", recommendFn.arn);
     api.route("POST /webhook", webhookFn.arn);
-    api.route("POST /sync/menu", syncFn.arn);
-  api.route("GET /ai/suggestions", aiSuggestionsFn.arn);
+    api.route("POST /ai/request", aiRequestFn.arn);
+    api.route("GET /ai/result", aiResultFn.arn);
 
     // ステップ6: Next.js サイト（CloudFront 配信）
     const menuJsonUrl = menuBucket.domain.apply(

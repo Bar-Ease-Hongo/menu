@@ -3,12 +3,12 @@
 Google スプレッドシートを唯一の管理画面として扱い、Apps Script と AWS サーバーレス基盤で承認フロー付きのメニュー JSON を生成し、Next.js でモバイル向け一覧・詳細 UI を提供するモノレポです。承認から 5 分以内の公開反映を目標に、AI による入力補完と Webhook 自動処理を組み合わせています。
 
 ## アーキテクチャ概要
-- Google スプレッドシート + Apps Script: メニュー入力、承認ワークフロー、Webhook 連携
-- AWS API Gateway + Lambda (`services/lambda/menu`): GAS 署名検証、画像ステージング → 本番コピー、`menu.json` 再生成
-- AWS DynamoDB (`sheet#menu` パーティション): シート内容の同期データを保存
-- Amazon Bedrock Claude 3 Haiku: 欠損値の AI 補完候補を生成
-- AWS S3: `menu.json` / `makers.json` / 画像アセットのホスティング
-- Next.js 14 (App Router): モバイル最適化された閲覧/検索フロントエンド
+- Google スプレッドシート + Apps Script: メニュー入力、AI補完依頼・公開承認（ボタン方式）
+- AWS API Gateway + Lambda: `/ai/request` (AI補完依頼), `/ai/result` (状態取得), `/webhook` (公開承認)
+- AWS DynamoDB: source/published 分離データ、flags 管理
+- Amazon Bedrock Claude 3 Haiku: AI補完（公式情報優先・欠損値のみ）
+- AWS S3: `menu.json` / `embeddings.json` / 画像アセット
+- Next.js 14 (App Router): モバイル最適化フロントエンド
 
 ## リポジトリ構成
 ```
@@ -59,9 +59,11 @@ pnpm dev
 
 ## Lambda / バックエンド
 ### `services/lambda/menu`
-- `nightlyCompletionHandler`: DynamoDB から未承認行を抽出し Claude Haiku による補完案を生成、`aiSuggestedDescription` / `aiSuggestedImageUrl` として書き戻し、`aiStatus` を `NeedsReview` に更新。
-- `generateMenuHandler`: DynamoDB (`pk = sheet#menu`) の行を読み込み、`status === "Published"` かつ `approveFlag === "Approved"` のレコードのみを抽出して `menu.json` を S3 に PUT。
-- `webhookHandler`: GAS からの HMAC 署名付きリクエストを検証し、ステージング画像を本番バケットへコピー後 `generateMenuHandler` を実行します。
+- `aiRequestHandler`: AI補完依頼処理（source → AI → published 保存 → Callback通知）
+- `aiResultHandler`: AI補完結果取得（flags/published 返却）
+- `webhookHandler`: 公開状態・表示情報制御（公開/非公開、元情報/優先公開情報）
+- `generateMenuHandler`: menu.json 生成（flags.displaySource ベースで表示情報選択）
+- `nightlyCompletionHandler`: バックアップ用AI補完（aiSuggested 保存）
 
 ### `services/lambda/recommend`
 - Amazon Titan Embeddings でベクトル化 → `embeddings.json` (S3) とコサイン類似度でランキング。
@@ -69,7 +71,7 @@ pnpm dev
 - レスポンス形式: `{ items: [{ id, name, maker, score, reason }] }`。
 
 ## インフラ (SST Ion)
-- `infra/sst.config.ts` で API Gateway, DynamoDB, S3 バケット 3 種, Lambda 群, Next.js サイト、`GasWebhookSecret` などを定義。
+- `infra/sst.config.ts` で API Gateway, DynamoDB, S3 バケット 3 種, Lambda 群, Next.js サイト、`GasWebhookSecret`、エンドポイント (`/ai/request`, `/ai/result`, `/webhook`, `/recommend`) を定義。
 - ローカルから Ion を起動する場合:
 
   ```bash
@@ -98,19 +100,18 @@ Apps Script エディタ右上の歯車アイコン → `プロジェクトの�
   3. `.env` の `GAS_WEBHOOK_SECRET` とスクリプト プロパティ `WEBHOOK_SECRET` に同じ値を貼り付けます。
   4. 既存値を確認したい場合は `pnpm exec sst secrets value GasWebhookSecret --stage <stage>` を使用。
 
-- `WEBHOOK_URL`
+- `AI_REQUEST_URL`
   1. `pnpm deploy:sst:<stage>` 実行後の出力、または `pnpm --filter @bar-ease/infra exec sst outputs --stage <stage>` で `ApiUrl` を取得。
-  2. `WEBHOOK_URL = <ApiUrl>/webhook` の形式で設定（例: `https://xxxx.execute-api.ap-northeast-1.amazonaws.com/webhook`）。
-  3. 同じ URL を `.env` の `GAS_WEBHOOK_ENDPOINT` にも設定します。
+  2. `AI_REQUEST_URL = <ApiUrl>/ai/request` の形式で設定（例: `https://xxxx.execute-api.ap-northeast-1.amazonaws.com/ai/request`）。
 
-- `SYNC_URL`
-  1. 上記 `ApiUrl` を用い、`SYNC_URL = <ApiUrl>/sync/menu` の形式で設定します。
-  2. GAS からの Upsert/Delete 同期で使用されるため、`WEBHOOK_SECRET` と同じ HMAC シークレットを利用します。
+- `WEBHOOK_URL`
+  1. 上記 `ApiUrl` を用い、`WEBHOOK_URL = <ApiUrl>/webhook` の形式で設定します。
+  2. 公開承認処理で使用されます。
 
-- `AI_SUGGESTIONS_URL` (AI サジェスト Pull を利用する場合のみ)
-  1. `AI_SUGGESTIONS_URL = <ApiUrl>/ai/suggestions` の形式で設定します。
-  2. `fetchAiSuggestions` / `manualFetchAiSuggestions` 関数が参照し、AI 候補説明文 / 画像URL を取得します。
-  3. 未利用の場合は設定不要です。
+- `AI_RESULT_URL`
+  1. 上記 `ApiUrl` を用い、`AI_RESULT_URL = <ApiUrl>/ai/result` の形式で設定します。
+  2. AI補完結果取得で使用されます。
+
 
 ### 3. 初回セットアップの実行
 1. Apps Script エディタで `setupMenuSheet` を選択して実行。
@@ -133,12 +134,15 @@ onEdit（単純トリガー）は認可が不要な範囲でのみ動作する�
   - イベントのソース: `時間主導型`
   - イベントの種類: 任意の間隔（例: `5 分おき`）
 
-AI サジェスト Pull を併用する場合 (任意):
-- 追加で時間主導トリガーを作成
-  - 実行する関数: `manualFetchAiSuggestions`
-  - イベントのソース: `時間主導型`
-  - イベントの種類: `15 分おき` など（補完頻度に応じ調整）
-  - 目的: `nightlyCompletionHandler` 等で生成された DynamoDB 上の候補をシートへ反映
+カスタムメニュー（ボタン方式）:
+- `onOpen` で「Bar Ease Hongo」メニューを作成
+  - AI補完依頼（選択行）
+  - 元情報で公開（選択行）
+  - 優先公開情報(AI補完情報)で公開（選択行）
+  - 公開取りやめ（選択行）
+  - 現状強制同期（選択行）
+  - 最新情報取得（全体）
+- AI完了時の Callback 受信用に `doPost` を実装（Web App として公開）
 
 補足
 - インストール型トリガーは「実行ユーザー」の権限で動作するため、`UrlFetchApp`・`PropertiesService` などの認可が必要なサービスを利用できます。
@@ -226,10 +230,22 @@ pnpm aws-login                   # AWS SSO ログイン補助
 ```
 
 ## 今後のタスク候補
-- DynamoDB への AI 補完結果の書き戻し実装
+- makers.json 自動生成パイプライン
 - Claude リランキング（Top-K 再スコアリング）
-- メーカー別 QR アクセス `/menu?maker=` の QR コード自動生成
-- E2E テスト（Playwright）による UI 品質担保
+- CloudFront Invalidation 自動化
+- E2E テスト（Playwright）
+
+## 運用フロー（新仕様）
+
+### 公開制御
+- **元情報で公開**: 従来通り手入力情報でメニュー表示
+- **優先公開情報(AI補完情報)で公開**: AI補完済み情報でメニュー表示
+- **公開取りやめ**: メニューから除外（非公開状態）
+
+### 状態管理
+- `公開状態`: 公開/非公開（Webアプリでの表示可否）
+- `表示情報`: 元情報/優先公開情報(AI補完情報)（表示内容の選択）
+- 優先公開列編集時は自動で「公開状態」をクリア（再承認が必要）
 
 ## オペレーションガイド (統合)
 
