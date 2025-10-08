@@ -21,7 +21,10 @@ const EMBEDDING_KEY = process.env.EMBEDDING_KEY ?? 'embeddings.json';
 const GAS_CALLBACK_URL = process.env.GAS_CALLBACK_URL; // AI完了通知用
 
 const s3Client = new S3Client({ region: REGION });
-const dynamoClient = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }));
+const dynamoClient = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }), {
+  marshallOptions: { removeUndefinedValues: true },
+  unmarshallOptions: { wrapNumbers: false }
+});
 
 const SHEET_PK = 'sheet#menu';
 const SHEET_SK_PREFIX = 'item#';

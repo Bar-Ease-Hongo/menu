@@ -49,26 +49,14 @@ function setupMenuSheet() {
     return idx + 1;
   };
   
-  // ID 自動採番（8桁ゼロパディング）
+  // ID 自動生成（UUID）
   const colId = colIndex('ID');
   const lastRow = sheet.getLastRow();
   if (lastRow >= 2) {
-    const ids = sheet.getRange(2, colId, lastRow - 1, 1).getValues().flat();
-    let maxId = 0;
-    ids.forEach(id => {
-      if (id) {
-        const numMatch = String(id).match(/\d+/);
-        if (numMatch) {
-          maxId = Math.max(maxId, parseInt(numMatch[0]));
-        }
-      }
-    });
-    
     for (let i = 2; i <= lastRow; i++) {
       const idVal = sheet.getRange(i, colId).getValue();
       if (!idVal) {
-        maxId++;
-        const newId = String(maxId).padStart(8, '0');
+        const newId = generateUUID();
         sheet.getRange(i, colId).setValue(newId);
       }
     }
@@ -77,8 +65,92 @@ function setupMenuSheet() {
   // 保護列の設定
   protectColumns(sheet, headers, PROTECTED_HEADERS);
 
+  // スケジュール設定
+  setupScheduledUpdate();
+
   SpreadsheetApp.flush();
   Logger.log('セットアップ完了');
+}
+
+// スケジュール設定（朝方6:00 AMに全体更新）
+function setupScheduledUpdate() {
+  // 既存のトリガーを削除
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'scheduledBatchUpdate') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  
+  // 新しいトリガーを作成（毎日6:00 AM）
+  ScriptApp.newTrigger('scheduledBatchUpdate')
+    .timeBased()
+    .everyDays(1)
+    .atHour(6)
+    .create();
+    
+  Logger.log('スケジュール設定完了: 毎日6:00 AMに全体更新を実行');
+}
+
+// スケジュール実行される全体更新
+function scheduledBatchUpdate() {
+  Logger.log('スケジュール全体更新開始');
+  
+  try {
+    const sheet = SpreadsheetApp.getActiveSheet();
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const colIndex = (name) => headers.indexOf(name) + 1;
+    
+    const colId = colIndex('ID');
+    const lastRow = sheet.getLastRow();
+    
+    if (lastRow < 2) {
+      Logger.log('データがありません');
+      return;
+    }
+    
+    // 全行のIDを取得
+    const ids = sheet.getRange(2, colId, lastRow - 1, 1).getValues().flat().filter(id => id);
+    
+    if (ids.length === 0) {
+      Logger.log('IDが見つかりません');
+      return;
+    }
+    
+    // AI補完結果を取得
+    const resultUrl = PropertiesService.getScriptProperties().getProperty(PROP_AI_RESULT_URL);
+    const secret = PropertiesService.getScriptProperties().getProperty(PROP_WEBHOOK_SECRET);
+    
+    if (!resultUrl || !secret) {
+      Logger.log('設定が不完全です');
+      return;
+    }
+    
+    const resultResponse = callSignedGet(resultUrl, secret);
+    const resultData = JSON.parse(resultResponse);
+    
+    if (!resultData.items || resultData.items.length === 0) {
+      Logger.log('AI補完結果がありません');
+      return;
+    }
+    
+    // 各IDに対して結果を反映
+    let updatedCount = 0;
+    resultData.items.forEach(item => {
+      if (item.flags?.aiCompleted) {
+        const row = findRowById(sheet, item.id, colId);
+        if (row) {
+          updateSingleRowFromAiResult(sheet, row, item);
+          updatedCount++;
+        }
+      }
+    });
+    
+    Logger.log(`スケジュール全体更新完了: ${updatedCount}件更新`);
+    
+  } catch (error) {
+    Logger.log(`スケジュール全体更新エラー: ${error.message}`);
+  }
 }
 
 function protectColumns(sheet, headers, names) {
@@ -108,8 +180,11 @@ function onOpen() {
     .addItem('AI補完情報で公開 (1行のみ)', 'publishWithPublished')
     .addItem('公開を停止 (1行のみ)', 'unpublishInfo')
     .addSeparator()
-    .addItem('データ修復 (全体)', 'forceSync')
+    .addItem('最新情報を取得 (1行のみ)', 'getLatestInfoSingleRow')
     .addItem('最新情報を取得 (全体)', 'fetchLatestInfo')
+    .addItem('IDを生成 (1行のみ)', 'generateIdForRow')
+    .addItem('データ修復 (全体)', 'forceSync')
+    .addItem('スケジュール設定', 'manageSchedule')
     .addSeparator()
     .addItem('設定を確認', 'checkSettings')
     .addToUi();
@@ -139,7 +214,7 @@ function handleSheetEdit(e) {
     sheet.getRange(row, colPublishStatus).setValue('');
   }
   
-  // ID自動採番（新規行）
+  // ID自動生成（新規行）
   const id = sheet.getRange(row, colId).getValue();
   if (!id && colId > 0) {
     const hasData = sheet.getRange(row, 1, 1, colId - 1)
@@ -147,7 +222,7 @@ function handleSheetEdit(e) {
       .some(val => val !== '');
     
     if (hasData) {
-      const newId = generateNextId(sheet, headers);
+      const newId = generateUUID();
       sheet.getRange(row, colId).setValue(newId);
     }
   }
@@ -158,23 +233,67 @@ function handleSheetEdit(e) {
   }
 }
 
-function generateNextId(sheet, headers) {
-  const colId = headers.indexOf('ID') + 1;
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return '00000001';
+
+// ===== ボタン: ID生成 =====
+function generateIdForRow() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const activeRange = sheet.getActiveRange();
+  const activeRow = activeRange.getRow();
+  const lastRow = activeRange.getLastRow();
   
-  const ids = sheet.getRange(2, colId, lastRow - 1, 1)
-    .getValues()
-    .flat()
-    .filter(id => id)
-    .map(id => {
-      const numMatch = String(id).match(/\d+/);
-      return numMatch ? parseInt(numMatch[0]) : 0;
-    });
+  if (activeRow <= 1) {
+    SpreadsheetApp.getUi().alert('エラー', 'データ行を選択してください', SpreadsheetApp.getUi().ButtonSet.OK);
+    return;
+  }
   
-  const maxId = ids.length > 0 ? Math.max(...ids) : 0;
-  const nextId = maxId + 1;
-  return String(nextId).padStart(8, '0');
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const itemName = getItemName(sheet, activeRow, headers);
+  
+  // 確認ダイアログ
+  let confirmMessage = `IDを生成します\n\n対象: ${itemName} (${activeRow}行目)\n機能: 選択行にUUIDを生成・設定します\n\n続行しますか？`;
+  
+  // 複数行選択時の警告を追記
+  if (activeRow !== lastRow) {
+    confirmMessage = `IDを生成します\n\n⚠️ 複数行が選択されています\n選択範囲: ${activeRow}行目〜${lastRow}行目\n${activeRow}行目のみ処理されます\n\n対象: ${itemName} (${activeRow}行目)\n機能: 選択行にUUIDを生成・設定します\n\n続行しますか？`;
+  }
+  
+  const result = SpreadsheetApp.getUi().alert(
+    'IDを生成',
+    confirmMessage,
+    SpreadsheetApp.getUi().ButtonSet.YES_NO
+  );
+  if (result !== SpreadsheetApp.getUi().Button.YES) {
+    return;
+  }
+  
+  const colIndex = (name) => headers.indexOf(name) + 1;
+  const colId = colIndex('ID');
+  
+  if (colId === 0) {
+    SpreadsheetApp.getUi().alert('エラー', 'ID列が見つかりません', SpreadsheetApp.getUi().ButtonSet.OK);
+    return;
+  }
+  
+  const currentId = sheet.getRange(activeRow, colId).getValue();
+  if (currentId) {
+    const overwrite = SpreadsheetApp.getUi().alert(
+      'IDが既に存在します',
+      `現在のID: ${currentId}\n\n新しいUUIDで上書きしますか？`,
+      SpreadsheetApp.getUi().ButtonSet.YES_NO
+    );
+    if (overwrite !== SpreadsheetApp.getUi().Button.YES) {
+      return;
+    }
+  }
+  
+  const newId = generateUUID();
+  sheet.getRange(activeRow, colId).setValue(newId);
+  
+  SpreadsheetApp.getUi().alert(
+    'ID生成完了',
+    `対象: ${itemName}\n\nUUIDを生成して${activeRow}行目に設定しました。`,
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
 }
 
 // ===== ボタン: AI補完依頼 =====
@@ -185,16 +304,19 @@ function requestAiCompletion() {
   const lastRow = activeRange.getLastRow();
   
   if (activeRow <= 1) {
-    SpreadsheetApp.getUi().alert('データ行を選択してください');
+    SpreadsheetApp.getUi().alert('エラー', 'データ行を選択してください', SpreadsheetApp.getUi().ButtonSet.OK);
     return;
   }
   
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const itemName = getItemName(sheet, activeRow, headers);
+  
   // 確認ダイアログ
-  let confirmMessage = `AI補完を実行します\n\n対象: ${activeRow}行目\n機能: 欠損値や間違った情報をAIで補完・修正します\n\n⚠️ 注意事項:\n• AI補完は依頼するだけで即時反映されません\n• 完了後は「最新情報を取得」で結果を反映してください\n• 処理には数秒〜数分かかる場合があります\n\n続行しますか？`;
+  let confirmMessage = `AI補完を実行します\n\n対象: ${itemName} (${activeRow}行目)\n機能: 欠損値や間違った情報をAIで補完・修正します\n\n⚠️ 注意事項:\n• 即座にAI補完を実行し、結果を反映します\n• 処理には10〜30秒かかる場合があります\n• インターネット接続が必要です\n\n続行しますか？`;
   
   // 複数行選択時の警告を追記
   if (activeRow !== lastRow) {
-    confirmMessage = `AI補完を実行します\n\n⚠️ 複数行が選択されています\n選択範囲: ${activeRow}行目〜${lastRow}行目\n${activeRow}行目のみ処理されます\n\n機能: 欠損値や間違った情報をAIで補完・修正します\n\n⚠️ 注意事項:\n• AI補完は依頼するだけで即時反映されません\n• 完了後は「最新情報を取得」で結果を反映してください\n• 処理には数秒〜数分かかる場合があります\n\n続行しますか？`;
+    confirmMessage = `AI補完を実行します\n\n⚠️ 複数行が選択されています\n選択範囲: ${activeRow}行目〜${lastRow}行目\n${activeRow}行目のみ処理されます\n\n対象: ${itemName} (${activeRow}行目)\n機能: 欠損値や間違った情報をAIで補完・修正します\n\n⚠️ 注意事項:\n• 即座にAI補完を実行し、結果を反映します\n• 処理には10〜30秒かかる場合があります\n• インターネット接続が必要です\n\n続行しますか？`;
   }
   
   const result = SpreadsheetApp.getUi().alert(
@@ -206,7 +328,6 @@ function requestAiCompletion() {
     return;
   }
   
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const colIndex = (name) => headers.indexOf(name) + 1;
   
   const colId = colIndex('ID');
@@ -214,7 +335,7 @@ function requestAiCompletion() {
   
   const itemId = sheet.getRange(activeRow, colId).getValue();
   if (!itemId) {
-    SpreadsheetApp.getUi().alert('IDが見つかりません');
+    SpreadsheetApp.getUi().alert('エラー', 'IDが見つかりません', SpreadsheetApp.getUi().ButtonSet.OK);
     return;
   }
   
@@ -229,20 +350,66 @@ function requestAiCompletion() {
   const secret = PropertiesService.getScriptProperties().getProperty(PROP_WEBHOOK_SECRET);
   
   if (!url || !secret) {
-    SpreadsheetApp.getUi().alert('AI_REQUEST_URL または WEBHOOK_SECRET が未設定です');
+    SpreadsheetApp.getUi().alert('エラー', 'AI_REQUEST_URL または WEBHOOK_SECRET が未設定です', SpreadsheetApp.getUi().ButtonSet.OK);
     return;
   }
   
-  const payload = {
+      const payload = {
     itemId: String(itemId),
     source: source
   };
   
   try {
+    // AI補完依頼
     callSignedApi(url, payload, secret);
-    SpreadsheetApp.getUi().alert(`AI補完依頼を送信しました (ID: ${itemId})`);
+    
+    // Callback方式の説明メッセージ
+    SpreadsheetApp.getUi().alert(
+      'AI補完依頼完了',
+      `AI補完を依頼しました。\n\n結果は自動でスプレッドシートに反映されます。\n\n※ 即座に結果を確認したい場合や、\n   待っても結果が反映されない場合は、\n   「最新情報を取得 (1行のみ)」を実行してください。`,
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
   } catch (error) {
-    SpreadsheetApp.getUi().alert(`エラー: ${error.message}`);
+    SpreadsheetApp.getUi().alert('エラー', `エラー: ${error.message}`, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+// 単一行のAI補完結果を反映
+function updateSingleRowFromAiResult(sheet, row, item) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const colIndex = (name) => headers.indexOf(name) + 1;
+  
+  const colAiComp = colIndex('AI補完済み');
+  const colPubName = colIndex('公開商品名');
+  const colPubMaker = colIndex('公開メーカー');
+  const colPubCat = colIndex('公開カテゴリ');
+  const colPubTags = colIndex('公開タグ');
+  const colPubDesc = colIndex('公開説明文');
+  const colPubAbv = colIndex('公開度数');
+  const colPubImg = colIndex('公開画像URL');
+  
+  if (item.flags?.aiCompleted) {
+    sheet.getRange(row, colAiComp).setValue('○');
+  }
+  
+  // AI補完結果を優先公開列に反映
+  const data = item.published || item.aiSuggested;
+  if (data) {
+    if (data.name) sheet.getRange(row, colPubName).setValue(data.name);
+    if (data.maker) sheet.getRange(row, colPubMaker).setValue(data.maker);
+    if (data.category) sheet.getRange(row, colPubCat).setValue(data.category);
+    if (data.tags) sheet.getRange(row, colPubTags).setValue(data.tags);
+    if (data.description) sheet.getRange(row, colPubDesc).setValue(data.description);
+    if (data.alcoholVolume) {
+      // 度数を文字列として設定（日付フォーマットを防ぐ）
+      const abvValue = typeof data.alcoholVolume === 'number' 
+        ? data.alcoholVolume 
+        : parseFloat(String(data.alcoholVolume).replace(/[^0-9.]/g, ''));
+      if (!isNaN(abvValue)) {
+        sheet.getRange(row, colPubAbv).setValue(`${abvValue}%`);
+      }
+    }
+    if (data.imageUrl) sheet.getRange(row, colPubImg).setValue(data.imageUrl);
   }
 }
 
@@ -289,7 +456,13 @@ function collectPublishedData(sheet, row, headers) {
     category: sheet.getRange(row, colIndex('公開カテゴリ')).getValue() || '',
     tags: sheet.getRange(row, colIndex('公開タグ')).getValue() || '',
     description: sheet.getRange(row, colIndex('公開説明文')).getValue() || '',
-    alcoholVolume: sheet.getRange(row, colIndex('公開度数')).getValue() || '',
+    alcoholVolume: (() => {
+      const value = sheet.getRange(row, colIndex('公開度数')).getValue();
+      if (!value) return '';
+      // 数値の場合はそのまま、文字列の場合は数値に変換
+      const numeric = typeof value === 'number' ? value : parseFloat(String(value).replace(/[^0-9.]/g, ''));
+      return isNaN(numeric) ? '' : numeric;
+    })(),
     imageUrl: sheet.getRange(row, colIndex('公開画像URL')).getValue() || ''
   };
 }
@@ -321,6 +494,9 @@ function publishInfo(publishStatus, displayInfo) {
     return;
   }
   
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const itemName = getItemName(sheet, activeRow, headers);
+  
   // 確認ダイアログ
   let actionName = '';
   let actionDescription = '';
@@ -340,11 +516,11 @@ function publishInfo(publishStatus, displayInfo) {
     notes = '⚠️ 注意事項:\n• 公開状態は「非公開」に変更されます\n• Webアプリからは表示されなくなります\n• 表示情報はクリアされます';
   }
   
-  let confirmMessage = `${actionName}を実行します\n\n対象: ${activeRow}行目\n機能: ${actionDescription}\n\n${notes}\n\n続行しますか？`;
+  let confirmMessage = `${actionName}を実行します\n\n対象: ${itemName} (${activeRow}行目)\n機能: ${actionDescription}\n\n${notes}\n\n続行しますか？`;
   
   // 複数行選択時の警告を追記
   if (activeRow !== lastRow) {
-    confirmMessage = `${actionName}を実行します\n\n⚠️ 複数行が選択されています\n選択範囲: ${activeRow}行目〜${lastRow}行目\n${activeRow}行目のみ処理されます\n\n機能: ${actionDescription}\n\n${notes}\n\n続行しますか？`;
+    confirmMessage = `${actionName}を実行します\n\n⚠️ 複数行が選択されています\n選択範囲: ${activeRow}行目〜${lastRow}行目\n${activeRow}行目のみ処理されます\n\n対象: ${itemName} (${activeRow}行目)\n機能: ${actionDescription}\n\n${notes}\n\n続行しますか？`;
   }
   
   const result = SpreadsheetApp.getUi().alert(
@@ -356,7 +532,6 @@ function publishInfo(publishStatus, displayInfo) {
     return;
   }
   
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const colIndex = (name) => headers.indexOf(name) + 1;
   
   const colId = colIndex('ID');
@@ -398,8 +573,8 @@ function publishInfo(publishStatus, displayInfo) {
   try {
     callSignedApi(url, payload, secret);
     const message = publishStatus === '公開' 
-      ? `${displayInfo}で公開しました (ID: ${itemId})`
-      : `公開を取りやめました (ID: ${itemId})`;
+      ? `${displayInfo}で公開しました\n\n対象: ${itemName}`
+      : `公開を取りやめました\n\n対象: ${itemName}`;
     SpreadsheetApp.getUi().alert(message);
   } catch (error) {
     SpreadsheetApp.getUi().alert(`エラー: ${error.message}`);
@@ -420,6 +595,49 @@ function forceSync() {
   
   // 既存のsyncMenuHandler相当の処理（必要なら実装）
   SpreadsheetApp.getUi().alert('データ修復は未実装です');
+}
+
+// ===== ボタン: スケジュール設定 =====
+function manageSchedule() {
+  const triggers = ScriptApp.getProjectTriggers();
+  const scheduledTrigger = triggers.find(trigger => 
+    trigger.getHandlerFunction() === 'scheduledBatchUpdate'
+  );
+  
+  let message = 'スケジュール設定状況:\n\n';
+  
+  if (scheduledTrigger) {
+    message += '✅ 全体更新スケジュール: 有効\n';
+    message += '実行時間: 毎日 6:00 AM\n';
+    message += '機能: AI補完結果の一括反映\n\n';
+    message += 'スケジュールを無効にしますか？';
+    
+    const result = SpreadsheetApp.getUi().alert(
+      'スケジュール設定',
+      message,
+      SpreadsheetApp.getUi().ButtonSet.YES_NO
+    );
+    
+    if (result === SpreadsheetApp.getUi().Button.YES) {
+      ScriptApp.deleteTrigger(scheduledTrigger);
+      SpreadsheetApp.getUi().alert('スケジュールを無効にしました');
+    }
+  } else {
+    message += '❌ 全体更新スケジュール: 無効\n\n';
+    message += 'スケジュールを有効にしますか？\n';
+    message += '（毎日 6:00 AM に自動実行）';
+    
+    const result = SpreadsheetApp.getUi().alert(
+      'スケジュール設定',
+      message,
+      SpreadsheetApp.getUi().ButtonSet.YES_NO
+    );
+    
+    if (result === SpreadsheetApp.getUi().Button.YES) {
+      setupScheduledUpdate();
+      SpreadsheetApp.getUi().alert('スケジュールを有効にしました');
+    }
+  }
 }
 
 // ===== ボタン: 設定確認 =====
@@ -450,12 +668,80 @@ function checkSettings() {
   SpreadsheetApp.getUi().alert(message);
 }
 
-// ===== ボタン: 最新情報取得 =====
+// ===== ボタン: 最新情報取得 (1行のみ) =====
+function getLatestInfoSingleRow() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const activeRange = sheet.getActiveRange();
+  const activeRow = activeRange.getRow();
+  const lastRow = activeRange.getLastRow();
+  
+  if (activeRow <= 1) {
+    SpreadsheetApp.getUi().alert('エラー', 'データ行を選択してください', SpreadsheetApp.getUi().ButtonSet.OK);
+    return;
+  }
+  
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const itemName = getItemName(sheet, activeRow, headers);
+  
+  // 確認ダイアログ
+  const result = SpreadsheetApp.getUi().alert(
+    '最新情報を取得 (1行のみ)',
+    `対象: ${itemName}\n\nこの行の最新情報を取得します。\n\n※ 複数行が選択されている場合は、\n   最初の行のみが処理されます。`,
+    SpreadsheetApp.getUi().ButtonSet.YES_NO
+  );
+  
+  if (result !== SpreadsheetApp.getUi().Button.YES) {
+    return;
+  }
+  
+  const colIndex = (name) => headers.indexOf(name) + 1;
+  const colId = colIndex('ID');
+  
+  const itemId = sheet.getRange(activeRow, colId).getValue();
+  if (!itemId) {
+    SpreadsheetApp.getUi().alert('エラー', 'IDが見つかりません', SpreadsheetApp.getUi().ButtonSet.OK);
+    return;
+  }
+  
+  const url = PropertiesService.getScriptProperties().getProperty(PROP_AI_RESULT_URL);
+  const secret = PropertiesService.getScriptProperties().getProperty(PROP_WEBHOOK_SECRET);
+  
+  if (!url || !secret) {
+    SpreadsheetApp.getUi().alert('エラー', 'AI_RESULT_URL または WEBHOOK_SECRET が未設定です', SpreadsheetApp.getUi().ButtonSet.OK);
+    return;
+  }
+  
+  try {
+    const fullUrl = `${url}?ids=${encodeURIComponent(String(itemId))}`;
+    const response = callSignedGet(fullUrl, secret);
+    const data = JSON.parse(response);
+    
+    if (data.items && data.items.length > 0) {
+      // 単一行の結果を反映
+      updateSingleRowFromAiResult(sheet, activeRow, data.items[0]);
+      SpreadsheetApp.getUi().alert(
+        '最新情報取得完了',
+        `対象: ${itemName}\n\n最新情報を取得してスプレッドシートに反映しました。`,
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    } else {
+      SpreadsheetApp.getUi().alert(
+        '情報なし',
+        `対象: ${itemName}\n\n取得可能な最新情報がありません。`,
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    }
+  } catch (error) {
+    SpreadsheetApp.getUi().alert('エラー', `エラー: ${error.message}`, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+// ===== ボタン: 最新情報取得 (全体) =====
 function fetchLatestInfo() {
   // 確認ダイアログ
   const result = SpreadsheetApp.getUi().alert(
     '最新情報を取得',
-    '最新情報を取得を実行します\n\n対象: 全データ\n機能: AI補完結果をスプレッドシートに反映します\n\n⚠️ 注意事項:\n• 完了したAI補完結果のみが反映されます\n• 処理中または未完了のAI補完は反映されません\n• 反映には数秒かかる場合があります\n\n続行しますか？',
+    '最新情報を取得を実行します\n\n対象: 全データ\n機能: AI補完結果をスプレッドシートに反映します\n\n⚠️ 注意事項:\n• 完了したAI補完結果のみが反映されます\n• 処理中または未完了のAI補完は反映されません\n• 反映には数秒〜数分かかる場合があります\n• 大量データの場合は処理時間が長くなる可能性があります\n• 通常は朝方（6:00 AM）に自動実行されます\n\n続行しますか？',
     SpreadsheetApp.getUi().ButtonSet.YES_NO
   );
   if (result !== SpreadsheetApp.getUi().Button.YES) {
@@ -679,5 +965,45 @@ function callSignedGet(url, secret) {
     throw new Error(`HTTP ${response.getResponseCode()}: ${response.getContentText()}`);
   }
   return response.getContentText();
+}
+
+// ===== ユーティリティ関数 =====
+function slugify(text) {
+  return text
+    .toString()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\-]+/g, '')
+    .replace(/\-\-+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '');
+}
+
+// UUID v4生成関数
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+// 商品名取得関数（優先公開情報優先、なければ元情報）
+function getItemName(sheet, row, headers) {
+  const colIndex = (name) => headers.indexOf(name) + 1;
+  
+  // 優先公開商品名を確認
+  const pubName = sheet.getRange(row, colIndex('公開商品名')).getValue();
+  if (pubName && pubName.trim()) {
+    return pubName.trim();
+  }
+  
+  // 元情報の商品名を確認
+  const sourceName = sheet.getRange(row, colIndex('商品名')).getValue();
+  if (sourceName && sourceName.trim()) {
+    return sourceName.trim();
+  }
+  
+  return '商品名なし';
 }
 
