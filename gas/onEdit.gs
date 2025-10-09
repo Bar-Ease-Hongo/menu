@@ -14,13 +14,29 @@ const EXISTING_HEADERS = [
 const NEW_HEADERS = [
   '公開商品名', '公開メーカー', '公開カテゴリ', '公開タグ', '公開説明文',
   '公開度数', '公開画像URL',
-  'AI補完依頼', 'AI補完済み', '公開状態', '表示情報',
+  'AI補完状態', '公開状態',
   'ID', '更新日時'
 ];
 
 const PROTECTED_HEADERS = [
-  'AI補完依頼', 'AI補完済み', '公開状態', '表示情報', 'ID', '更新日時'
+  'AI補完状態', '公開状態', 'ID', '更新日時'
 ];
+
+// AI補完状態の値
+const AI_STATUS = {
+  EMPTY: '',           // 何もしていない
+  REQUESTED: '依頼済み', // AI補完依頼済み
+  SUCCESS: '成功',      // AI補完成功
+  FAILED: '失敗'        // AI補完失敗（エラー等）
+};
+
+// 公開状態の値
+const PUBLISH_STATUS = {
+  EMPTY: '',                  // 何もしていない
+  SOURCE: '元情報で公開',        // 元情報で公開
+  PUBLISHED: 'AI補完情報で公開',  // AI補完情報で公開
+  UNPUBLISHED: '非公開'         // 非公開
+};
 
 // ===== Script Properties キー =====
 const PROP_WEBHOOK_SECRET = 'WEBHOOK_SECRET';
@@ -331,7 +347,7 @@ function requestAiCompletion() {
   const colIndex = (name) => headers.indexOf(name) + 1;
   
   const colId = colIndex('ID');
-  const colAiReq = colIndex('AI補完依頼');
+  const colAiStatus = colIndex('AI補完状態');
   
   const itemId = sheet.getRange(activeRow, colId).getValue();
   if (!itemId) {
@@ -342,8 +358,8 @@ function requestAiCompletion() {
   // source データ収集
   const source = collectSourceData(sheet, activeRow, headers);
   
-  // AI補完依頼を○に
-  sheet.getRange(activeRow, colAiReq).setValue('○');
+  // AI補完状態を「依頼済み」に
+  sheet.getRange(activeRow, colAiStatus).setValue(AI_STATUS.REQUESTED);
   
   // POST /ai/request
   const url = PropertiesService.getScriptProperties().getProperty(PROP_AI_REQUEST_URL);
@@ -370,6 +386,8 @@ function requestAiCompletion() {
       SpreadsheetApp.getUi().ButtonSet.OK
     );
   } catch (error) {
+    // エラー時は「失敗」に設定
+    sheet.getRange(activeRow, colAiStatus).setValue(AI_STATUS.FAILED);
     SpreadsheetApp.getUi().alert('エラー', `エラー: ${error.message}`, SpreadsheetApp.getUi().ButtonSet.OK);
   }
 }
@@ -379,7 +397,7 @@ function updateSingleRowFromAiResult(sheet, row, item) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const colIndex = (name) => headers.indexOf(name) + 1;
   
-  const colAiComp = colIndex('AI補完済み');
+  const colAiStatus = colIndex('AI補完状態');
   const colPubName = colIndex('公開商品名');
   const colPubMaker = colIndex('公開メーカー');
   const colPubCat = colIndex('公開カテゴリ');
@@ -388,8 +406,14 @@ function updateSingleRowFromAiResult(sheet, row, item) {
   const colPubAbv = colIndex('公開度数');
   const colPubImg = colIndex('公開画像URL');
   
-  if (item.flags?.aiCompleted) {
-    sheet.getRange(row, colAiComp).setValue('○');
+  // AI補完状態を更新
+  if (item.flags?.aiFailed) {
+    sheet.getRange(row, colAiStatus).setValue(AI_STATUS.FAILED);
+  } else if (item.flags?.aiCompleted) {
+    sheet.getRange(row, colAiStatus).setValue(AI_STATUS.SUCCESS);
+  } else if (item.flags?.aiRequested) {
+    // 依頼済みだがまだ完了していない
+    sheet.getRange(row, colAiStatus).setValue(AI_STATUS.REQUESTED);
   }
   
   // AI補完結果を優先公開列に反映
@@ -469,21 +493,21 @@ function collectPublishedData(sheet, row, headers) {
 
 // ===== ボタン: 元情報で公開 =====
 function publishWithSource() {
-  publishInfo('公開', '元情報');
+  publishInfo(PUBLISH_STATUS.SOURCE);
 }
 
 // ===== ボタン: 優先公開情報(AI補完情報)で公開 =====
 function publishWithPublished() {
-  publishInfo('公開', '優先公開情報(AI補完情報)');
+  publishInfo(PUBLISH_STATUS.PUBLISHED);
 }
 
 // ===== ボタン: 公開取りやめ =====
 function unpublishInfo() {
-  publishInfo('非公開', '');
+  publishInfo(PUBLISH_STATUS.UNPUBLISHED);
 }
 
 // ===== 共通: 公開処理 =====
-function publishInfo(publishStatus, displayInfo) {
+function publishInfo(newPublishStatus) {
   const sheet = SpreadsheetApp.getActiveSheet();
   const activeRange = sheet.getActiveRange();
   const activeRow = activeRange.getRow();
@@ -502,18 +526,18 @@ function publishInfo(publishStatus, displayInfo) {
   let actionDescription = '';
   let notes = '';
   
-  if (publishStatus === '公開' && displayInfo === '元情報') {
+  if (newPublishStatus === PUBLISH_STATUS.SOURCE) {
     actionName = '元の情報で公開';
     actionDescription = 'スプレッドシートの元の情報をWebアプリに公開します';
-    notes = '⚠️ 注意事項:\n• 公開後はWebアプリで確認できます\n• 公開状態は「公開」に変更されます\n• 表示情報は「元情報」に設定されます';
-  } else if (publishStatus === '公開' && displayInfo === '優先公開情報(AI補完情報)') {
+    notes = '⚠️ 注意事項:\n• 公開後はWebアプリで確認できます\n• 公開状態は「元情報で公開」に変更されます';
+  } else if (newPublishStatus === PUBLISH_STATUS.PUBLISHED) {
     actionName = 'AI補完情報で公開';
     actionDescription = 'AI補完された情報をWebアプリに公開します';
-    notes = '⚠️ 注意事項:\n• AI補完が完了していない場合は元情報が表示されます\n• 公開後はWebアプリで確認できます\n• 公開状態は「公開」に変更されます\n• 表示情報は「優先公開情報(AI補完情報)」に設定されます';
-  } else if (publishStatus === '非公開') {
+    notes = '⚠️ 注意事項:\n• AI補完が完了していない場合は元情報が表示されます\n• 公開後はWebアプリで確認できます\n• 公開状態は「AI補完情報で公開」に変更されます';
+  } else if (newPublishStatus === PUBLISH_STATUS.UNPUBLISHED) {
     actionName = '公開を停止';
     actionDescription = 'Webアプリからの公開を停止します';
-    notes = '⚠️ 注意事項:\n• 公開状態は「非公開」に変更されます\n• Webアプリからは表示されなくなります\n• 表示情報はクリアされます';
+    notes = '⚠️ 注意事項:\n• 公開状態は「非公開」に変更されます\n• Webアプリからは表示されなくなります';
   }
   
   let confirmMessage = `${actionName}を実行します\n\n対象: ${itemName} (${activeRow}行目)\n機能: ${actionDescription}\n\n${notes}\n\n続行しますか？`;
@@ -536,7 +560,6 @@ function publishInfo(publishStatus, displayInfo) {
   
   const colId = colIndex('ID');
   const colPublishStatus = colIndex('公開状態');
-  const colDisplayInfo = colIndex('表示情報');
   
   const itemId = sheet.getRange(activeRow, colId).getValue();
   if (!itemId) {
@@ -547,11 +570,8 @@ function publishInfo(publishStatus, displayInfo) {
   const source = collectSourceData(sheet, activeRow, headers);
   const published = collectPublishedData(sheet, activeRow, headers);
   
-  // 公開状態と表示情報を設定
-  sheet.getRange(activeRow, colPublishStatus).setValue(publishStatus);
-  if (displayInfo) {
-    sheet.getRange(activeRow, colDisplayInfo).setValue(displayInfo);
-  }
+  // 公開状態を設定
+  sheet.getRange(activeRow, colPublishStatus).setValue(newPublishStatus);
   
   // POST /webhook
   const url = PropertiesService.getScriptProperties().getProperty(PROP_WEBHOOK_URL);
@@ -562,19 +582,21 @@ function publishInfo(publishStatus, displayInfo) {
     return;
   }
   
+  // Lambda側へ送信するpayload（publishStatusとdisplayInfoを判定）
   const payload = {
     itemId: String(itemId),
     source: source,
     published: published,
-    publishStatus: publishStatus,
-    displayInfo: displayInfo
+    publishStatus: newPublishStatus === PUBLISH_STATUS.UNPUBLISHED ? '非公開' : '公開',
+    displayInfo: newPublishStatus === PUBLISH_STATUS.SOURCE ? '元情報' : 
+                 newPublishStatus === PUBLISH_STATUS.PUBLISHED ? '優先公開情報(AI補完情報)' : ''
   };
   
   try {
     callSignedApi(url, payload, secret);
-    const message = publishStatus === '公開' 
-      ? `${displayInfo}で公開しました\n\n対象: ${itemName}`
-      : `公開を取りやめました\n\n対象: ${itemName}`;
+    const message = newPublishStatus === PUBLISH_STATUS.UNPUBLISHED
+      ? `公開を取りやめました\n\n対象: ${itemName}`
+      : `${actionName}しました\n\n対象: ${itemName}`;
     SpreadsheetApp.getUi().alert(message);
   } catch (error) {
     SpreadsheetApp.getUi().alert(`エラー: ${error.message}`);
@@ -789,7 +811,7 @@ function fetchLatestInfo() {
 function updateSheetFromAiResult(sheet, headers, items) {
   const colIndex = (name) => headers.indexOf(name) + 1;
   const colId = colIndex('ID');
-  const colAiComp = colIndex('AI補完済み');
+  const colAiStatus = colIndex('AI補完状態');
   
   const colPubName = colIndex('公開商品名');
   const colPubMaker = colIndex('公開メーカー');
@@ -804,8 +826,13 @@ function updateSheetFromAiResult(sheet, headers, items) {
     const row = findRowById(sheet, id, colId);
     if (!row) return;
     
-    if (item.flags?.aiCompleted) {
-      sheet.getRange(row, colAiComp).setValue('○');
+    // AI補完状態を更新
+    if (item.flags?.aiFailed) {
+      sheet.getRange(row, colAiStatus).setValue(AI_STATUS.FAILED);
+    } else if (item.flags?.aiCompleted) {
+      sheet.getRange(row, colAiStatus).setValue(AI_STATUS.SUCCESS);
+    } else if (item.flags?.aiRequested) {
+      sheet.getRange(row, colAiStatus).setValue(AI_STATUS.REQUESTED);
     }
     
     // AI補完結果を優先公開列に反映
@@ -869,12 +896,13 @@ function handleAiCompleted(payload) {
   const colIndex = (name) => headers.indexOf(name) + 1;
   
   const colId = colIndex('ID');
-  const colAiComp = colIndex('AI補完済み');
+  const colAiStatus = colIndex('AI補完状態');
   
   const row = findRowById(sheet, payload.itemId, colId);
   if (!row) return;
   
-  sheet.getRange(row, colAiComp).setValue('○');
+  // AI補完状態を「成功」に設定
+  sheet.getRange(row, colAiStatus).setValue(AI_STATUS.SUCCESS);
   
   if (payload.published) {
     const pub = payload.published;

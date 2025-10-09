@@ -128,7 +128,7 @@ export function filterMenu(items: MenuItem[], { keyword, maker, category, tags }
   const tagList = tags?.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) ?? [];
 
   return items.filter((item) => {
-    if (item.status !== 'Published' || item.aiStatus !== 'Approved') {
+    if (item.status !== 'Published') {
       return false;
     }
 

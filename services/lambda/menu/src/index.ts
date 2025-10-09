@@ -238,6 +238,40 @@ export async function aiRequestHandler(event: APIGatewayProxyEventV2): Promise<A
     };
   } catch (error) {
     console.error('[aiRequest] error', { itemId, error });
+    
+    // エラー時もフラグを更新（失敗状態を記録）
+    try {
+      const pk = SHEET_PK;
+      const sk = buildSortKey(itemId);
+      const entity = await findEntityById(itemId);
+      
+      await dynamoClient.send(
+        new UpdateCommand({
+          TableName: TABLE_NAME,
+          Key: { pk, sk },
+          UpdateExpression: `SET 
+            #flags = :flags,
+            #updatedAt = :updatedAt
+          `,
+          ExpressionAttributeNames: {
+            '#flags': 'flags',
+            '#updatedAt': 'updatedAt'
+          },
+          ExpressionAttributeValues: {
+            ':flags': {
+              ...(entity?.flags || {}),
+              aiRequested: true,
+              aiCompleted: false,
+              aiFailed: true
+            } as ItemFlags,
+            ':updatedAt': new Date().toISOString()
+          }
+        })
+      );
+    } catch (updateError) {
+      console.error('[aiRequest] failed to update error flag', { itemId, updateError });
+    }
+    
     return {
       statusCode: 500,
       body: JSON.stringify({ message: 'internal error', error: (error as Error).message })
@@ -412,17 +446,18 @@ function convertEntityToMenuItem(entity: SheetEntity): MenuItem {
   const useSource = flags?.displaySource === true;
   const data = useSource ? source : published;
   
-  const name = data?.name ?? source.name ?? 'No name';
-  const maker = data?.maker ?? source.maker ?? '';
-  const category = data?.category ?? source.category ?? 'その他';
-  const tags = parseTags(data?.tags ?? source.tags);
-  const description = data?.description ?? source.description ?? '';
-  const alcoholVolume = toPercentageNumber(data?.alcoholVolume ?? source.alcoholVolume);
-  const imageUrl = data?.imageUrl ?? source.imageUrl ?? '';
-  const country = data?.country ?? source.country;
-  const type = data?.type ?? source.type;
-  const caskType = data?.caskType ?? source.caskType;
-  const maturationPeriod = data?.maturationPeriod ?? source.maturationPeriod;
+  // publishedが空の場合もsourceで補完（元情報で公開の場合に対応）
+  const name = data?.name || source.name || 'No name';
+  const maker = data?.maker || source.maker || '';
+  const category = data?.category || source.category || 'その他';
+  const tags = parseTags(data?.tags || source.tags);
+  const description = data?.description || source.description || '';
+  const alcoholVolume = toPercentageNumber(data?.alcoholVolume || source.alcoholVolume);
+  const imageUrl = data?.imageUrl || source.imageUrl || '';
+  const country = data?.country || source.country;
+  const type = data?.type || source.type;
+  const caskType = data?.caskType || source.caskType;
+  const maturationPeriod = data?.maturationPeriod || source.maturationPeriod;
 
   return {
     id: entity.id || extractIdFromSortKey(entity.sk),
@@ -546,7 +581,7 @@ JSONスキーマ（補完が必要なフィールドのみ返す）:
   "maker": "メーカー名（正規表記）",
   "category": "カテゴリ（例：ウイスキー／ラム／ジン／ビール 等）",
   "description": "50〜80文字程度の説明（宣伝文句ではなく中立・簡潔）",
-  "tags": ["3〜5個の味わい・特徴タグ（例：smoky, fruity）"],
+  "tags": ["3〜5個の味わい・特徴タグ（必ず日本語で。例：スモーキー、フルーティー、華やか、滑らか、ピーティー、バニラ、スパイシー）"],
   "country": "生産国（必ず和名で統一。例：スコットランド、アイルランド、アメリカ、日本）",
   "type": "タイプ（銘柄の種別。例：シングルモルト、ブレンデッド、IPA など）",
   "maturationPeriod": "熟成年数／期間（該当しない場合は 'N/A' 等）",
@@ -560,6 +595,7 @@ JSONスキーマ（補完が必要なフィールドのみ返す）:
 - 公式情報を最優先。非公式情報しか見つからない場合は一般に妥当な定説を用いる。
 - 事実と推定が混同しないよう、description は断定的表現を避け簡潔に。
 - 既存値が正確な場合は変更しない。
+- **tagsは必ず日本語で記述してください。カタカナ語も含めて、すべて日本語で統一してください。**
 - 必ず有効なJSONのみを返してください。説明文やコメントは一切含めないでください。
 
 重要: レスポンスは必ず以下の形式で返してください:

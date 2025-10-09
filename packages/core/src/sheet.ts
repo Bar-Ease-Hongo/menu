@@ -42,6 +42,7 @@ export interface PublishedData {
 export interface ItemFlags {
   aiRequested?: boolean;      // AI補完依頼中
   aiCompleted?: boolean;       // AI補完済み
+  aiFailed?: boolean;          // AI補完失敗
   publishApproved?: boolean;   // 公開承認済み
   displaySource?: boolean;     // 表示情報（true=元情報, false=優先公開情報）
   sourceHash?: string;         // 元情報ハッシュ（重複防止）
