@@ -131,7 +131,7 @@ export async function aiRequestHandler(event: APIGatewayProxyEventV2): Promise<A
 
   try {
     const entity = await findEntityById(itemId);
-    const sourceHash = computeHash(source);
+    const sourceHash = computeHash(source as Record<string, unknown>);
 
     // ハッシュ最適化: 前回と同じなら再実行スキップ
     if (entity?.flags?.sourceHash === sourceHash && entity?.flags?.aiCompleted) {
@@ -213,7 +213,7 @@ export async function aiRequestHandler(event: APIGatewayProxyEventV2): Promise<A
             aiRequested: true,
             aiCompleted: true,
             sourceHash,
-            publishedHash: computeHash(published)
+            publishedHash: computeHash(published as Record<string, unknown>)
           } as ItemFlags,
           ':updatedAt': now,
           ':createdAt': entity?.createdAt ?? now
@@ -345,17 +345,16 @@ export async function webhookHandler(event: APIGatewayProxyEventV2): Promise<API
     itemId: string;
     source: SourceData;
     published?: PublishedData;
-    publishStatus: string;  // '公開' | '非公開'
-    displayInfo: string;    // '元情報' | '優先公開情報(AI補完情報)' | ''
+    publishStatus: string;  // '表示' | '非表示'
   };
 
-  const { itemId, source, published, publishStatus, displayInfo } = payload;
+  const { itemId, source, published, publishStatus } = payload;
 
   if (!itemId || !source) {
     return { statusCode: 400, body: JSON.stringify({ message: 'itemId and source required' }) };
   }
 
-  console.log('[webhook] start', { itemId, publishStatus, displayInfo });
+  console.log('[webhook] start', { itemId, publishStatus });
 
   try {
     const now = new Date().toISOString();
@@ -363,9 +362,6 @@ export async function webhookHandler(event: APIGatewayProxyEventV2): Promise<API
     const sk = buildSortKey(itemId);
 
     const entity = await findEntityById(itemId);
-
-    // 表示情報の判定
-    const displaySource = displayInfo === '元情報';
 
     // Dynamo更新
   await dynamoClient.send(
@@ -391,10 +387,9 @@ export async function webhookHandler(event: APIGatewayProxyEventV2): Promise<API
           ':published': published ?? {},
           ':flags': {
             ...entity?.flags,
-            publishApproved: publishStatus === '公開',
-            displaySource: displaySource,
-            sourceHash: computeHash(source),
-            publishedHash: published ? computeHash(published) : undefined
+            publishApproved: publishStatus === '表示',
+            sourceHash: computeHash(source as Record<string, unknown>),
+            publishedHash: published ? computeHash(published as Record<string, unknown>) : undefined
           } as ItemFlags,
           ':updatedAt': now,
           ':createdAt': entity?.createdAt ?? now
@@ -405,7 +400,7 @@ export async function webhookHandler(event: APIGatewayProxyEventV2): Promise<API
     // menu.json 再生成
     await generateMenuHandler();
 
-    console.log('[webhook] completed', { itemId, publishStatus, displayInfo });
+    console.log('[webhook] completed', { itemId, publishStatus });
 
     return {
       statusCode: 200,
@@ -440,24 +435,21 @@ export async function generateMenuHandler() {
 }
 
 function convertEntityToMenuItem(entity: SheetEntity): MenuItem {
-  const { source, published, flags } = entity;
+  const { source, published } = entity;
   
-  // 表示情報の選択（displaySource=trueなら元情報、falseなら優先公開情報）
-  const useSource = flags?.displaySource === true;
-  const data = useSource ? source : published;
-  
-  // publishedが空の場合もsourceで補完（元情報で公開の場合に対応）
-  const name = data?.name || source.name || 'No name';
-  const maker = data?.maker || source.maker || '';
-  const category = data?.category || source.category || 'その他';
-  const tags = parseTags(data?.tags || source.tags);
-  const description = data?.description || source.description || '';
-  const alcoholVolume = toPercentageNumber(data?.alcoholVolume || source.alcoholVolume);
-  const imageUrl = data?.imageUrl || source.imageUrl || '';
-  const country = data?.country || source.country;
-  const type = data?.type || source.type;
-  const caskType = data?.caskType || source.caskType;
-  const maturationPeriod = data?.maturationPeriod || source.maturationPeriod;
+  // 優先公開情報があればそれを使用、なければ元情報を使用
+  // 各フィールドごとに判定（publishedに値があればpublished、なければsource）
+  const name = published?.name || source.name || 'No name';
+  const maker = published?.maker || source.maker || '';
+  const category = published?.category || source.category || 'その他';
+  const tags = parseTags(published?.tags || source.tags);
+  const description = published?.description || source.description || '';
+  const alcoholVolume = toPercentageNumber(published?.alcoholVolume || source.alcoholVolume);
+  const imageUrl = published?.imageUrl || source.imageUrl || '';
+  const country = published?.country || source.country;
+  const type = published?.type || source.type;
+  const caskType = published?.caskType || source.caskType;
+  const maturationPeriod = published?.maturationPeriod || source.maturationPeriod;
 
   return {
     id: entity.id || extractIdFromSortKey(entity.sk),
@@ -714,12 +706,10 @@ async function verifySignature(signature: string, body: string, timestampHeader?
 
   const message = `${timestamp}.${body}`;
   
-  // secretをBufferとして明示的に処理
-  const secretBuffer = Buffer.from(secret, 'utf-8');
-  const hmac = crypto.createHmac('sha256', secretBuffer);
+  // secretを文字列として処理
+  const hmac = crypto.createHmac('sha256', secret);
   hmac.update(message, 'utf-8');
-  const computedBytes = hmac.digest();
-  const computed = computedBytes.toString('hex');
+  const computed = hmac.digest('hex');
   
   return signature.toLowerCase() === computed;
 }

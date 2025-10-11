@@ -14,12 +14,12 @@ const EXISTING_HEADERS = [
 const NEW_HEADERS = [
   '公開商品名', '公開メーカー', '公開カテゴリ', '公開タグ', '公開説明文',
   '公開度数', '公開画像URL',
-  'AI補完状態', '公開状態',
+  'AI補完状態', 'メニュー表示状態',
   'ID', '更新日時'
 ];
 
 const PROTECTED_HEADERS = [
-  'AI補完状態', '公開状態', 'ID', '更新日時'
+  'AI補完状態', 'メニュー表示状態', 'ID', '更新日時'
 ];
 
 // AI補完状態の値
@@ -30,12 +30,11 @@ const AI_STATUS = {
   FAILED: '失敗'        // AI補完失敗（エラー等）
 };
 
-// 公開状態の値
+// メニュー表示状態の値
 const PUBLISH_STATUS = {
   EMPTY: '',                  // 何もしていない
-  SOURCE: '元情報で公開',        // 元情報で公開
-  PUBLISHED: 'AI補完情報で公開',  // AI補完情報で公開
-  UNPUBLISHED: '非公開'         // 非公開
+  VISIBLE: 'メニューに表示',    // メニューに表示（優先公開情報優先、なければ元情報）
+  HIDDEN: '非表示'             // 非表示
 };
 
 // ===== Script Properties キー =====
@@ -192,9 +191,8 @@ function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Bar Ease Hongo')
     .addItem('AI補完を実行 (1行のみ)', 'requestAiCompletion')
-    .addItem('元の情報で公開 (1行のみ)', 'publishWithSource')
-    .addItem('AI補完情報で公開 (1行のみ)', 'publishWithPublished')
-    .addItem('公開を停止 (1行のみ)', 'unpublishInfo')
+    .addItem('メニューに表示 (1行のみ)', 'showInMenu')
+    .addItem('メニューから非表示 (1行のみ)', 'hideFromMenu')
     .addSeparator()
     .addItem('最新情報を取得 (1行のみ)', 'getLatestInfoSingleRow')
     .addItem('最新情報を取得 (全体)', 'fetchLatestInfo')
@@ -221,11 +219,11 @@ function handleSheetEdit(e) {
   
   const colIdStart = colIndex('公開商品名');
   const colIdEnd = colIndex('公開画像URL');
-  const colPublishStatus = colIndex('公開状態');
+  const colPublishStatus = colIndex('メニュー表示状態');
   const colId = colIndex('ID');
   const colUpdated = colIndex('更新日時');
   
-  // 優先公開列が編集されたら「公開状態」をクリア
+  // 優先公開列が編集されたら「メニュー表示状態」をクリア
   if (col >= colIdStart && col <= colIdEnd && colPublishStatus > 0) {
     sheet.getRange(row, colPublishStatus).setValue('');
   }
@@ -491,22 +489,17 @@ function collectPublishedData(sheet, row, headers) {
   };
 }
 
-// ===== ボタン: 元情報で公開 =====
-function publishWithSource() {
-  publishInfo(PUBLISH_STATUS.SOURCE);
+// ===== ボタン: メニューに表示 =====
+function showInMenu() {
+  publishInfo(PUBLISH_STATUS.VISIBLE);
 }
 
-// ===== ボタン: 優先公開情報(AI補完情報)で公開 =====
-function publishWithPublished() {
-  publishInfo(PUBLISH_STATUS.PUBLISHED);
+// ===== ボタン: メニューから非表示 =====
+function hideFromMenu() {
+  publishInfo(PUBLISH_STATUS.HIDDEN);
 }
 
-// ===== ボタン: 公開取りやめ =====
-function unpublishInfo() {
-  publishInfo(PUBLISH_STATUS.UNPUBLISHED);
-}
-
-// ===== 共通: 公開処理 =====
+// ===== 共通: メニュー表示制御処理 =====
 function publishInfo(newPublishStatus) {
   const sheet = SpreadsheetApp.getActiveSheet();
   const activeRange = sheet.getActiveRange();
@@ -526,18 +519,14 @@ function publishInfo(newPublishStatus) {
   let actionDescription = '';
   let notes = '';
   
-  if (newPublishStatus === PUBLISH_STATUS.SOURCE) {
-    actionName = '元の情報で公開';
-    actionDescription = 'スプレッドシートの元の情報をWebアプリに公開します';
-    notes = '⚠️ 注意事項:\n• 公開後はWebアプリで確認できます\n• 公開状態は「元情報で公開」に変更されます';
-  } else if (newPublishStatus === PUBLISH_STATUS.PUBLISHED) {
-    actionName = 'AI補完情報で公開';
-    actionDescription = 'AI補完された情報をWebアプリに公開します';
-    notes = '⚠️ 注意事項:\n• AI補完が完了していない場合は元情報が表示されます\n• 公開後はWebアプリで確認できます\n• 公開状態は「AI補完情報で公開」に変更されます';
-  } else if (newPublishStatus === PUBLISH_STATUS.UNPUBLISHED) {
-    actionName = '公開を停止';
-    actionDescription = 'Webアプリからの公開を停止します';
-    notes = '⚠️ 注意事項:\n• 公開状態は「非公開」に変更されます\n• Webアプリからは表示されなくなります';
+  if (newPublishStatus === PUBLISH_STATUS.VISIBLE) {
+    actionName = 'メニューに表示';
+    actionDescription = 'この商品をWebアプリのメニューに表示します';
+    notes = '⚠️ 注意事項:\n• 優先公開情報（公開商品名など）があればそちらを表示します\n• 優先公開情報がない項目は元情報を表示します\n• メニュー表示状態は「メニューに表示」に変更されます';
+  } else if (newPublishStatus === PUBLISH_STATUS.HIDDEN) {
+    actionName = 'メニューから非表示';
+    actionDescription = 'この商品をWebアプリのメニューから非表示にします';
+    notes = '⚠️ 注意事項:\n• メニュー表示状態は「非表示」に変更されます\n• お客様のメニューからは表示されなくなります';
   }
   
   let confirmMessage = `${actionName}を実行します\n\n対象: ${itemName} (${activeRow}行目)\n機能: ${actionDescription}\n\n${notes}\n\n続行しますか？`;
@@ -559,7 +548,7 @@ function publishInfo(newPublishStatus) {
   const colIndex = (name) => headers.indexOf(name) + 1;
   
   const colId = colIndex('ID');
-  const colPublishStatus = colIndex('公開状態');
+  const colPublishStatus = colIndex('メニュー表示状態');
   
   const itemId = sheet.getRange(activeRow, colId).getValue();
   if (!itemId) {
@@ -570,7 +559,7 @@ function publishInfo(newPublishStatus) {
   const source = collectSourceData(sheet, activeRow, headers);
   const published = collectPublishedData(sheet, activeRow, headers);
   
-  // 公開状態を設定
+  // メニュー表示状態を設定
   sheet.getRange(activeRow, colPublishStatus).setValue(newPublishStatus);
   
   // POST /webhook
@@ -582,21 +571,21 @@ function publishInfo(newPublishStatus) {
     return;
   }
   
-  // Lambda側へ送信するpayload（publishStatusとdisplayInfoを判定）
+  // Lambda側へ送信するpayload
+  // publishStatus: メニューに表示するかどうか（'表示' or '非表示'）
+  // published: 優先公開情報（Lambda側で空チェックして元情報とマージ）
   const payload = {
     itemId: String(itemId),
     source: source,
     published: published,
-    publishStatus: newPublishStatus === PUBLISH_STATUS.UNPUBLISHED ? '非公開' : '公開',
-    displayInfo: newPublishStatus === PUBLISH_STATUS.SOURCE ? '元情報' : 
-                 newPublishStatus === PUBLISH_STATUS.PUBLISHED ? '優先公開情報(AI補完情報)' : ''
+    publishStatus: newPublishStatus === PUBLISH_STATUS.VISIBLE ? '表示' : '非表示'
   };
   
   try {
     callSignedApi(url, payload, secret);
-    const message = newPublishStatus === PUBLISH_STATUS.UNPUBLISHED
-      ? `公開を取りやめました\n\n対象: ${itemName}`
-      : `${actionName}しました\n\n対象: ${itemName}`;
+    const message = newPublishStatus === PUBLISH_STATUS.VISIBLE
+      ? `メニューに表示しました\n\n対象: ${itemName}`
+      : `メニューから非表示にしました\n\n対象: ${itemName}`;
     SpreadsheetApp.getUi().alert(message);
   } catch (error) {
     SpreadsheetApp.getUi().alert(`エラー: ${error.message}`);
