@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bar Ease Hongo メニュー</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #0B0B0D;
+      color: #F5F5F5;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1rem;
+    }
+    
+    header {
+      margin-bottom: 2rem;
+      padding: 2rem 0;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    
+    h1 {
+      font-size: 2.5rem;
+      color: #C9A227;
+      font-family: Georgia, serif;
+      margin-bottom: 0.5rem;
+    }
+    
+    h2 {
+      font-size: 1.8rem;
+      color: #C9A227;
+      font-family: Georgia, serif;
+      margin-bottom: 1rem;
+    }
+    
+    h3 {
+      font-size: 1.3rem;
+      color: #F5F5F5;
+      margin-bottom: 0.5rem;
+    }
+    
+    .subtitle {
+      color: #D9D9D9;
+      font-size: 1rem;
+    }
+    
+    /* タブ */
+    .tabs {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      border-bottom: 2px solid #2a2a2a;
+    }
+    
+    .tab {
+      padding: 0.75rem 1.5rem;
+      background: none;
+      border: none;
+      color: #D9D9D9;
+      font-size: 1rem;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.3s;
+    }
+    
+    .tab:hover {
+      color: #C9A227;
+    }
+    
+    .tab.active {
+      color: #C9A227;
+      border-bottom-color: #C9A227;
+    }
+    
+    /* フィルタセクション */
+    .filters {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    
+    .filter-group {
+      margin-bottom: 1rem;
+    }
+    
+    .filter-group:last-child {
+      margin-bottom: 0;
+    }
+    
+    .filter-label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: #D9D9D9;
+      font-size: 0.9rem;
+    }
+    
+    input[type="text"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 0.75rem;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid #404040;
+      border-radius: 8px;
+      color: #F5F5F5;
+      font-size: 1rem;
+    }
+    
+    input[type="text"]:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: #C9A227;
+    }
+    
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+      font-family: inherit;
+    }
+    
+    /* フィルタボタン */
+    .filter-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    
+    .filter-btn {
+      padding: 0.5rem 1rem;
+      background: transparent;
+      border: 1px solid #404040;
+      border-radius: 20px;
+      color: #D9D9D9;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .filter-btn:hover {
+      border-color: #C9A227;
+      color: #C9A227;
+    }
+    
+    .filter-btn.active {
+      background: #C9A227;
+      border-color: #C9A227;
+      color: #0B0B0D;
+    }
+    
+    /* ボタン */
+    .btn {
+      padding: 0.75rem 1.5rem;
+      background: #C9A227;
+      border: 1px solid #C9A227;
+      border-radius: 25px;
+      color: #0B0B0D;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: inline-block;
+    }
+    
+    .btn:hover {
+      background: transparent;
+      color: #C9A227;
+    }
+    
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .btn-full {
+      width: 100%;
+    }
+    
+    /* メニューグリッド */
+    .menu-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    
+    .menu-card {
+      background: linear-gradient(135deg, rgba(20, 20, 20, 0.8) 0%, rgba(0, 0, 0, 0.9) 100%);
+      border: 1px solid #2a2a2a;
+      border-radius: 16px;
+      padding: 2rem;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .menu-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #C9A227 0%, #E4C55A 100%);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    
+    .menu-card:hover {
+      border-color: #C9A227;
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(201, 162, 39, 0.15);
+    }
+    
+    .menu-card:hover::before {
+      opacity: 1;
+    }
+    
+    .card-header {
+      margin-bottom: 1.25rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid rgba(201, 162, 39, 0.1);
+    }
+    
+    .card-title {
+      font-size: 1.35rem;
+      color: #F5F5F5;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    
+    .card-maker {
+      color: #C9A227;
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+    
+    .card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    
+    .tag {
+      padding: 0.35rem 0.85rem;
+      background: rgba(201, 162, 39, 0.15);
+      border: 1px solid rgba(201, 162, 39, 0.3);
+      border-radius: 16px;
+      color: #C9A227;
+      font-size: 0.8rem;
+      font-weight: 500;
+      transition: all 0.3s;
+    }
+    
+    .tag:hover {
+      background: rgba(201, 162, 39, 0.25);
+      border-color: #C9A227;
+    }
+    
+    .card-description {
+      color: #D9D9D9;
+      font-size: 0.95rem;
+      line-height: 1.7;
+      margin-bottom: 1.25rem;
+      min-height: 3em;
+    }
+    
+    .card-meta {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(201, 162, 39, 0.1);
+    }
+    
+    .card-meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    
+    .card-meta-label {
+      font-size: 0.75rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    
+    .card-meta-value {
+      font-size: 1rem;
+      color: #F5F5F5;
+      font-weight: 600;
+    }
+    
+    /* レコメンド結果 */
+    .recommend-results {
+      margin-top: 2rem;
+    }
+    
+    .recommend-card {
+      background: linear-gradient(135deg, rgba(20, 20, 20, 0.8) 0%, rgba(0, 0, 0, 0.9) 100%);
+      border: 1px solid #2a2a2a;
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s;
+    }
+    
+    .recommend-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #C9A227 0%, #E4C55A 100%);
+    }
+    
+    .recommend-card:hover {
+      border-color: #C9A227;
+      box-shadow: 0 8px 24px rgba(201, 162, 39, 0.15);
+    }
+    
+    .recommend-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 1rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid rgba(201, 162, 39, 0.1);
+    }
+    
+    .recommend-title {
+      font-size: 1.35rem;
+      color: #F5F5F5;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    
+    .recommend-maker {
+      color: #C9A227;
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+    
+    .recommend-reason {
+      color: #D9D9D9;
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 1rem;
+    }
+    
+    /* ローディング */
+    .loading {
+      text-align: center;
+      padding: 3rem;
+      color: #888;
+    }
+    
+    .spinner {
+      border: 3px solid #2a2a2a;
+      border-top-color: #C9A227;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* エラー */
+    .error {
+      background: rgba(220, 38, 38, 0.1);
+      border: 1px solid rgba(220, 38, 38, 0.3);
+      border-radius: 8px;
+      padding: 1rem;
+      color: #fca5a5;
+      margin-bottom: 1rem;
+    }
+    
+    /* 空の状態 */
+    .empty {
+      text-align: center;
+      padding: 3rem;
+      color: #888;
+    }
+    
+    /* レスポンシブ */
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2rem;
+      }
+      
+      .menu-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      .menu-card {
+        padding: 1.5rem;
+      }
+      
+      .card-title {
+        font-size: 1.2rem;
+      }
+      
+      .card-meta {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+      }
+      
+      .recommend-card {
+        padding: 1.5rem;
+      }
+      
+      .recommend-title {
+        font-size: 1.2rem;
+      }
+    }
+    
+    /* モーダル */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 1rem;
+      overflow-y: auto;
+    }
+    
+    .modal-content {
+      background: linear-gradient(135deg, rgba(20, 20, 20, 0.95) 0%, rgba(0, 0, 0, 0.98) 100%);
+      border: 1px solid #C9A227;
+      border-radius: 20px;
+      max-width: 800px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative;
+      box-shadow: 0 20px 60px rgba(201, 162, 39, 0.3);
+    }
+    
+    .modal-header {
+      padding: 2rem;
+      border-bottom: 1px solid rgba(201, 162, 39, 0.2);
+      position: sticky;
+      top: 0;
+      background: rgba(0, 0, 0, 0.95);
+      backdrop-filter: blur(10px);
+      z-index: 1;
+    }
+    
+    .modal-close {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      background: transparent;
+      border: 1px solid #404040;
+      color: #D9D9D9;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      font-size: 1.5rem;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .modal-close:hover {
+      border-color: #C9A227;
+      color: #C9A227;
+      background: rgba(201, 162, 39, 0.1);
+    }
+    
+    .modal-body {
+      padding: 2rem;
+    }
+    
+    .detail-section {
+      margin-bottom: 2rem;
+    }
+    
+    .detail-section:last-child {
+      margin-bottom: 0;
+    }
+    
+    .detail-title {
+      font-size: 0.85rem;
+      color: #C9A227;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.75rem;
+      font-weight: 600;
+    }
+    
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    
+    .detail-item {
+      background: rgba(201, 162, 39, 0.05);
+      border: 1px solid rgba(201, 162, 39, 0.2);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+    
+    .detail-label {
+      font-size: 0.75rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+    
+    .detail-value {
+      font-size: 1rem;
+      color: #F5F5F5;
+      font-weight: 500;
+    }
+    
+    .price-list {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    
+    .price-item {
+      flex: 1;
+      min-width: 120px;
+    }
+    
+    /* ユーティリティ */
+    .hidden {
+      display: none !important;
+    }
+    
+    .mt-2 {
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Bar Ease Hongo</h1>
+      <p class="subtitle">プレミアムウイスキー＆スピリッツ</p>
+    </header>
+    
+    <!-- タブ -->
+    <div class="tabs">
+      <button class="tab active" data-tab="menu">メニュー一覧</button>
+      <button class="tab" data-tab="recommend">AIおすすめ</button>
+    </div>
+    
+    <!-- メニュー一覧タブ -->
+    <div id="menu-tab" class="tab-content">
+      <div class="filters">
+        <div class="filter-group">
+          <label class="filter-label">キーワード検索</label>
+          <input type="text" id="keyword-input" placeholder="商品名、メーカー、説明文で検索...">
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">メーカー</label>
+          <select id="maker-select">
+            <option value="">すべて</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">カテゴリ</label>
+          <select id="category-select">
+            <option value="">すべて</option>
+          </select>
+        </div>
+      </div>
+      
+      <div id="menu-count" class="subtitle mt-2"></div>
+      <div id="menu-grid" class="menu-grid"></div>
+    </div>
+    
+    <!-- AIおすすめタブ -->
+    <div id="recommend-tab" class="tab-content hidden">
+      <div class="filters">
+        <div class="filter-group">
+          <label class="filter-label">気分や好みを自由に入力</label>
+          <textarea id="recommend-text" placeholder="例: スモーキーでフルーティー、甘さ控えめのものが飲みたい"></textarea>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">クイックフィルタ</label>
+          <div class="filter-buttons">
+            <button class="filter-btn" data-filter="base" data-value="ウイスキー">ウイスキー</button>
+            <button class="filter-btn" data-filter="base" data-value="ラム">ラム</button>
+            <button class="filter-btn" data-filter="base" data-value="ジン">ジン</button>
+            <button class="filter-btn" data-filter="taste" data-value="スモーキー">スモーキー</button>
+            <button class="filter-btn" data-filter="taste" data-value="フルーティー">フルーティー</button>
+            <button class="filter-btn" data-filter="taste" data-value="スパイシー">スパイシー</button>
+          </div>
+        </div>
+        <button class="btn btn-full" id="recommend-btn">おすすめを表示</button>
+      </div>
+      
+      <div id="recommend-error" class="error hidden"></div>
+      <div id="recommend-loading" class="loading hidden">
+        <div class="spinner"></div>
+        <p>AIがおすすめを考えています...</p>
+      </div>
+      <div id="recommend-results" class="recommend-results hidden"></div>
+    </div>
+  </div>
+  
+  <!-- 詳細モーダル -->
+  <div id="detail-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button class="modal-close" onclick="closeDetailModal()">×</button>
+        <div id="modal-header-content"></div>
+      </div>
+      <div class="modal-body">
+        <div id="modal-body-content"></div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // データを後で取得（初期は空）
+    let menuData = { items: [], total: 0, updatedAt: '' };
+    
+    let currentTab = 'menu';
+    let filters = {
+      keyword: '',
+      maker: '',
+      category: '',
+      recommendPrefs: {
+        base: '',
+        taste: '',
+        memo: ''
+      }
+    };
+    
+    // 初期化
+    document.addEventListener('DOMContentLoaded', function() {
+      initTabs();
+      initRecommend();
+      
+      // サーバーからデータを取得
+      showLoading();
+      
+      console.log('[init] Starting data fetch...');
+      
+      google.script.run
+        .withSuccessHandler(function(data) {
+          console.log('[init] Data received:', data);
+          
+          if (!data || !data.items) {
+            showError('データの形式が不正です');
+            return;
+          }
+          
+          menuData = data;
+          console.log('[init] Menu items count:', menuData.items.length);
+          
+          initFilters();
+          renderMenu();
+          hideLoading();
+        })
+        .withFailureHandler(function(error) {
+          console.error('[init] Data fetch failed:', error);
+          hideLoading();
+          const errorMessage = error && error.message ? error.message : 'データの読み込みに失敗しました';
+          showError('データの読み込みに失敗しました: ' + errorMessage);
+        })
+        .getMenuDataForClient();
+      
+      // タイムアウト設定（30秒）
+      setTimeout(function() {
+        if (menuData.items.length === 0) {
+          console.warn('[init] Timeout - no data received after 30 seconds');
+          hideLoading();
+          showError('データの読み込みがタイムアウトしました。ページをリロードしてください。');
+        }
+      }, 30000);
+    });
+    
+    function showLoading() {
+      const grid = document.getElementById('menu-grid');
+      if (grid) {
+        grid.innerHTML = '<div class="loading"><div class="spinner"></div><p>データを読み込んでいます...</p></div>';
+      }
+    }
+    
+    function hideLoading() {
+      // renderMenu()が呼ばれるので特に処理不要
+    }
+    
+    // タブ切り替え
+    function initTabs() {
+      const tabs = document.querySelectorAll('.tab');
+      tabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+          const tabName = this.getAttribute('data-tab');
+          switchTab(tabName);
+        });
+      });
+    }
+    
+    function switchTab(tabName) {
+      currentTab = tabName;
+      
+      // タブボタンのアクティブ状態
+      document.querySelectorAll('.tab').forEach(tab => {
+        if (tab.getAttribute('data-tab') === tabName) {
+          tab.classList.add('active');
+        } else {
+          tab.classList.remove('active');
+        }
+      });
+      
+      // タブコンテンツの表示/非表示
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+      });
+      document.getElementById(tabName + '-tab').classList.remove('hidden');
+    }
+    
+    // フィルタ初期化
+    function initFilters() {
+      // キーワード検索
+      const keywordInput = document.getElementById('keyword-input');
+      keywordInput.addEventListener('input', function() {
+        filters.keyword = this.value;
+        renderMenu();
+      });
+      
+      // メーカー選択
+      const makerSelect = document.getElementById('maker-select');
+      const makers = [...new Set(menuData.items.map(item => item.maker).filter(Boolean))].sort();
+      makers.forEach(maker => {
+        const option = document.createElement('option');
+        option.value = maker;
+        option.textContent = maker;
+        makerSelect.appendChild(option);
+      });
+      makerSelect.addEventListener('change', function() {
+        filters.maker = this.value;
+        renderMenu();
+      });
+      
+      // カテゴリ選択
+      const categorySelect = document.getElementById('category-select');
+      const categories = [...new Set(menuData.items.map(item => item.category).filter(Boolean))].sort();
+      categories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        categorySelect.appendChild(option);
+      });
+      categorySelect.addEventListener('change', function() {
+        filters.category = this.value;
+        renderMenu();
+      });
+    }
+    
+    // レコメンド初期化
+    function initRecommend() {
+      // フィルタボタン
+      const filterBtns = document.querySelectorAll('.filter-btn');
+      filterBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+          const filterType = this.getAttribute('data-filter');
+          const value = this.getAttribute('data-value');
+          
+          if (this.classList.contains('active')) {
+            this.classList.remove('active');
+            filters.recommendPrefs[filterType] = '';
+          } else {
+            // 同じフィルタタイプの他のボタンを非アクティブ化
+            filterBtns.forEach(b => {
+              if (b.getAttribute('data-filter') === filterType && b !== this) {
+                b.classList.remove('active');
+              }
+            });
+            this.classList.add('active');
+            filters.recommendPrefs[filterType] = value;
+          }
+        });
+      });
+      
+      // おすすめボタン
+      const recommendBtn = document.getElementById('recommend-btn');
+      recommendBtn.addEventListener('click', function() {
+        handleRecommend();
+      });
+    }
+    
+    // メニュー表示
+    function renderMenu() {
+      const grid = document.getElementById('menu-grid');
+      const count = document.getElementById('menu-count');
+      
+      // フィルタリング
+      let items = menuData.items;
+      
+      if (filters.keyword) {
+        const keyword = filters.keyword.toLowerCase();
+        items = items.filter(item => {
+          return (item.name && item.name.toLowerCase().includes(keyword)) ||
+                 (item.maker && item.maker.toLowerCase().includes(keyword)) ||
+                 (item.description && item.description.toLowerCase().includes(keyword)) ||
+                 (item.tags && item.tags.some(tag => tag.toLowerCase().includes(keyword)));
+        });
+      }
+      
+      if (filters.maker) {
+        items = items.filter(item => item.maker === filters.maker);
+      }
+      
+      if (filters.category) {
+        items = items.filter(item => item.category === filters.category);
+      }
+      
+      // カウント表示
+      count.textContent = items.length + '件の商品';
+      
+      // グリッド表示
+      if (items.length === 0) {
+        grid.innerHTML = '<div class="empty">条件に一致する商品がありませんでした。</div>';
+        return;
+      }
+      
+      grid.innerHTML = items.map(item => {
+        const tags = item.tags && item.tags.length > 0
+          ? '<div class="card-tags">' + item.tags.map(tag => '<span class="tag">' + escapeHtml(tag) + '</span>').join('') + '</div>'
+          : '';
+        
+        const abv = item.alcoholVolume ? item.alcoholVolume + '%' : '—';
+        const price = item.price30ml ? '¥' + item.price30ml : '—';
+        const country = item.country ? escapeHtml(item.country) : '—';
+        const category = item.category ? escapeHtml(item.category) : '—';
+        
+        return '<div class="menu-card" onclick="showDetailModal(\'' + item.id + '\')" style="cursor: pointer;">' +
+          '<div class="card-header">' +
+            '<h3 class="card-title">' + escapeHtml(item.name) + '</h3>' +
+            '<p class="card-maker">' + escapeHtml(item.maker) + '</p>' +
+          '</div>' +
+          tags +
+          '<p class="card-description">' + escapeHtml(item.description || '説明文がありません') + '</p>' +
+          '<div class="card-meta">' +
+            '<div class="card-meta-item">' +
+              '<span class="card-meta-label">Alcohol</span>' +
+              '<span class="card-meta-value">' + abv + '</span>' +
+            '</div>' +
+            '<div class="card-meta-item">' +
+              '<span class="card-meta-label">Price (30ml)</span>' +
+              '<span class="card-meta-value">' + price + '</span>' +
+            '</div>' +
+            '<div class="card-meta-item">' +
+              '<span class="card-meta-label">Origin</span>' +
+              '<span class="card-meta-value">' + country + '</span>' +
+            '</div>' +
+            '<div class="card-meta-item">' +
+              '<span class="card-meta-label">Category</span>' +
+              '<span class="card-meta-value">' + category + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div style="margin-top: 1rem; text-align: center; font-size: 0.85rem; color: #C9A227;">クリックして詳細を表示 →</div>' +
+        '</div>';
+      }).join('');
+    }
+    
+    // レコメンド処理
+    function handleRecommend() {
+      const text = document.getElementById('recommend-text').value.trim();
+      
+      if (!text && !filters.recommendPrefs.base && !filters.recommendPrefs.taste) {
+        showError('気分や好みを入力してください');
+        return;
+      }
+      
+      // 候補を最大20件に制限
+      const candidates = menuData.items.slice(0, 20).map(item => ({
+        id: item.id,
+        name: item.name,
+        base: item.category,
+        taste: item.tags ? item.tags.join(', ') : '',
+        price: item.price30ml,
+        abv: item.alcoholVolume,
+        tags: item.tags,
+        description: item.description
+      }));
+      
+      if (candidates.length === 0) {
+        showError('候補が見つかりません');
+        return;
+      }
+      
+      const request = {
+        prefs: {
+          base: filters.recommendPrefs.base,
+          taste: filters.recommendPrefs.taste,
+          memo: text
+        },
+        candidates: candidates
+      };
+      
+      // ローディング表示
+      document.getElementById('recommend-error').classList.add('hidden');
+      document.getElementById('recommend-results').classList.add('hidden');
+      document.getElementById('recommend-loading').classList.remove('hidden');
+      document.getElementById('recommend-btn').disabled = true;
+      
+      // Google Apps Scriptの関数を呼び出し
+      google.script.run
+        .withSuccessHandler(handleRecommendSuccess)
+        .withFailureHandler(handleRecommendError)
+        .recommend(request);
+    }
+    
+    function handleRecommendSuccess(response) {
+      document.getElementById('recommend-loading').classList.add('hidden');
+      document.getElementById('recommend-btn').disabled = false;
+      
+      if (response.error) {
+        showError(response.message || 'エラーが発生しました');
+        return;
+      }
+      
+      const data = response.data;
+      const resultsDiv = document.getElementById('recommend-results');
+      
+      if (!data.items || data.items.length === 0) {
+        showError('おすすめが見つかりませんでした');
+        return;
+      }
+      
+      resultsDiv.innerHTML = '<h2>おすすめの一杯</h2>' +
+        (data.note ? '<p class="subtitle">' + escapeHtml(data.note) + '</p>' : '') +
+        data.items.map(item => {
+          const menuItem = menuData.items.find(m => m.id === item.id);
+          const name = menuItem ? menuItem.name : item.id;
+          const maker = menuItem ? menuItem.maker : '';
+          
+          return '<div class="recommend-card">' +
+            '<div class="recommend-header">' +
+              '<div>' +
+                '<h3 class="recommend-title">' + escapeHtml(name) + '</h3>' +
+                '<p class="recommend-maker">' + escapeHtml(maker) + '</p>' +
+              '</div>' +
+            '</div>' +
+            '<p class="recommend-reason">' + escapeHtml(item.reason) + '</p>' +
+            (item.serve ? '<p class="subtitle mt-2">提供方法: ' + escapeHtml(item.serve) + '</p>' : '') +
+          '</div>';
+        }).join('');
+      
+      resultsDiv.classList.remove('hidden');
+    }
+    
+    function handleRecommendError(error) {
+      document.getElementById('recommend-loading').classList.add('hidden');
+      document.getElementById('recommend-btn').disabled = false;
+      showError('エラーが発生しました: ' + error.message);
+    }
+    
+    function showError(message) {
+      const errorDiv = document.getElementById('recommend-error');
+      if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.classList.remove('hidden');
+      } else {
+        // レコメンドエラー要素がない場合はメニューグリッドにエラー表示
+        const grid = document.getElementById('menu-grid');
+        if (grid) {
+          grid.innerHTML = '<div class="error">' + message + '</div>';
+        }
+      }
+    }
+    
+    // HTMLエスケープ
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    // 詳細モーダル表示
+    function showDetailModal(itemId) {
+      const item = menuData.items.find(i => i.id === itemId);
+      if (!item) return;
+      
+      // ヘッダー
+      const headerHtml = '<span class="text-xs uppercase tracking-wide" style="color: #C9A227;">' + escapeHtml(item.category) + '</span>' +
+        '<h2 style="font-family: Georgia, serif; font-size: 2rem; color: #F5F5F5; margin-top: 0.5rem;">' + escapeHtml(item.name) + '</h2>' +
+        '<p style="color: #C9A227; font-size: 1.1rem; margin-top: 0.5rem;">' + escapeHtml(item.maker) + '</p>' +
+        (item.tags && item.tags.length > 0 ? '<div class="card-tags" style="margin-top: 1rem;">' + item.tags.map(tag => '<span class="tag">' + escapeHtml(tag) + '</span>').join('') + '</div>' : '');
+      
+      // ボディ
+      let bodyHtml = '';
+      
+      // テイスティングノート
+      if (item.description) {
+        bodyHtml += '<div class="detail-section">' +
+          '<h3 class="detail-title">テイスティングノート</h3>' +
+          '<p style="color: #D9D9D9; line-height: 1.7; font-size: 1rem;">' + escapeHtml(item.description) + '</p>' +
+        '</div>';
+      }
+      
+      // 価格
+      const prices = [];
+      if (item.price30ml) prices.push({ size: '30ml', price: item.price30ml });
+      if (item.price15ml) prices.push({ size: '15ml', price: item.price15ml });
+      if (item.price10ml) prices.push({ size: '10ml', price: item.price10ml });
+      
+      if (prices.length > 0) {
+        bodyHtml += '<div class="detail-section">' +
+          '<h3 class="detail-title">価格</h3>' +
+          '<div class="price-list">' +
+          prices.map(p => 
+            '<div class="price-item">' +
+              '<div class="detail-label">' + p.size + '</div>' +
+              '<div class="detail-value">¥' + p.price.toLocaleString('ja-JP') + '</div>' +
+            '</div>'
+          ).join('') +
+          '</div>' +
+        '</div>';
+      }
+      
+      // 詳細情報
+      const details = [];
+      if (item.alcoholVolume) details.push({ label: 'アルコール度数', value: item.alcoholVolume + '%' });
+      if (item.country) details.push({ label: '生産国', value: item.country });
+      if (item.distillery) details.push({ label: '蒸溜所', value: item.distillery });
+      if (item.maturationPeriod) details.push({ label: '熟成年数', value: item.maturationPeriod });
+      if (item.caskType) details.push({ label: '樽種', value: item.caskType });
+      
+      if (details.length > 0) {
+        bodyHtml += '<div class="detail-section">' +
+          '<h3 class="detail-title">詳細情報</h3>' +
+          '<div class="detail-grid">' +
+          details.map(d => 
+            '<div class="detail-item">' +
+              '<div class="detail-label">' + escapeHtml(d.label) + '</div>' +
+              '<div class="detail-value">' + escapeHtml(d.value) + '</div>' +
+            '</div>'
+          ).join('') +
+          '</div>' +
+        '</div>';
+      }
+      
+      document.getElementById('modal-header-content').innerHTML = headerHtml;
+      document.getElementById('modal-body-content').innerHTML = bodyHtml;
+      document.getElementById('detail-modal').classList.remove('hidden');
+      
+      // ESCキーで閉じる
+      document.addEventListener('keydown', handleEscKey);
+    }
+    
+    function closeDetailModal() {
+      document.getElementById('detail-modal').classList.add('hidden');
+      document.removeEventListener('keydown', handleEscKey);
+    }
+    
+    function handleEscKey(e) {
+      if (e.key === 'Escape') {
+        closeDetailModal();
+      }
+    }
+    
+    // モーダル外クリックで閉じる
+    document.addEventListener('click', function(e) {
+      const modal = document.getElementById('detail-modal');
+      if (e.target === modal) {
+        closeDetailModal();
+      }
+    });
+  </script>
+</body>
+</html>
+
