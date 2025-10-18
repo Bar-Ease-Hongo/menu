@@ -58,6 +58,25 @@
       animation: spin 1s linear infinite;
     }
     
+    /* 複数選択ドロップダウンのスタイル */
+    select[multiple] option {
+      padding: 12px;
+      border-radius: 4px;
+      margin: 2px 0;
+    }
+    
+    select[multiple] option:checked {
+      background: linear-gradient(#C9A227, #C9A227);
+      color: #0B0B0D;
+      font-weight: 600;
+    }
+    
+    @media screen and (max-width: 1023px) {
+      select[multiple] option {
+        padding: 16px;
+      }
+    }
+    
     /* iOS Safariでのズーム防止 */
     @media screen and (max-width: 767px) {
       input, select, textarea {
@@ -76,18 +95,24 @@
     
     <!-- カテゴリ選択（共通） -->
     <div class="mb-6 sm:mb-8">
-      <h2 class="text-2xl sm:text-3xl lg:text-base text-bar-gray mb-4 lg:mb-3 font-bold lg:font-semibold">カテゴリを選択</h2>
+      <h2 class="text-2xl sm:text-3xl lg:text-base text-bar-gray mb-4 lg:mb-3 font-bold lg:font-semibold">カテゴリ</h2>
       <div id="category-buttons" class="flex flex-wrap gap-3 lg:gap-2">
         <!-- カテゴリボタンは動的に生成 -->
       </div>
     </div>
     
     <!-- タブ -->
-    <div class="flex gap-4 sm:gap-5 lg:gap-3 mb-6 sm:mb-8 border-b-2 border-bar-gray-dark overflow-x-auto">
+    <div id="main-tabs" class="hidden flex gap-4 sm:gap-5 lg:gap-3 mb-6 sm:mb-8 border-b-2 border-bar-gray-dark overflow-x-auto">
       <button class="tab-btn px-7 sm:px-8 lg:px-6 py-5 lg:py-3 text-2xl sm:text-3xl lg:text-base text-bar-gray border-b-2 border-transparent transition-all duration-300 hover:text-bar-gold whitespace-nowrap font-bold lg:font-semibold" 
               data-tab="menu">メニュー一覧</button>
       <button class="tab-btn px-7 sm:px-8 lg:px-6 py-5 lg:py-3 text-2xl sm:text-3xl lg:text-base text-bar-gray border-b-2 border-transparent transition-all duration-300 hover:text-bar-gold whitespace-nowrap font-bold lg:font-semibold" 
               data-tab="recommend">おすすめ</button>
+    </div>
+    
+    <!-- データ読み込み中の表示 -->
+    <div id="tab-loading" class="hidden flex flex-col items-center justify-center py-24 lg:py-12 text-gray-500">
+      <div class="border-[5px] lg:border-4 border-bar-gray-dark border-t-bar-gold rounded-full w-24 lg:w-12 h-24 lg:h-12 animate-spin-custom mb-8 lg:mb-4"></div>
+      <p class="text-3xl sm:text-4xl lg:text-base font-medium">データを読み込んでいます...</p>
     </div>
     
     <!-- メニュー一覧タブ -->
@@ -118,6 +143,9 @@
                           focus:outline-none focus:border-bar-gold transition-colors"
                    placeholder="商品名、メーカー、説明文で検索...">
           </div>
+          <div id="menu-tag-filter-container">
+            <!-- タグフィルタは動的に生成 -->
+          </div>
           <div class="flex gap-3 lg:gap-2">
             <button id="search-btn" class="flex-1 px-7 sm:px-8 lg:px-6 py-6 lg:py-3 bg-bar-gold border-[3px] lg:border-2 border-bar-gold rounded-full text-bar-dark text-3xl sm:text-4xl lg:text-base font-black lg:font-semibold
                            transition-all duration-300 hover:bg-transparent hover:text-bar-gold">
@@ -146,10 +174,34 @@
                       class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base
                              focus:outline-none focus:border-bar-gold transition-colors resize-y min-h-[180px] lg:min-h-[100px]"
                       placeholder="例: スモーキーでフルーティー、甘さ控えめのものが飲みたい"></textarea>
-        </div>
-          <div id="quick-filter-container">
-            <!-- クイックフィルタは動的に生成 -->
           </div>
+          
+          <!-- クイックフィルタ -->
+          <div>
+            <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">クイックフィルタ</label>
+            <div class="space-y-6 lg:space-y-4">
+              <!-- 香り -->
+              <div>
+                <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">香り（Aroma / Nose）</label>
+                <select id="aroma-select" 
+                        class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base
+                               focus:outline-none focus:border-bar-gold transition-colors">
+                  <!-- オプションは動的に生成 -->
+                </select>
+              </div>
+              
+              <!-- 味わい -->
+              <div>
+                <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">味わい（Palate / Taste）</label>
+                <select id="taste-select" 
+                        class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base
+                               focus:outline-none focus:border-bar-gold transition-colors">
+                  <!-- オプションは動的に生成 -->
+                </select>
+              </div>
+            </div>
+          </div>
+          
           <button class="w-full px-7 sm:px-8 lg:px-6 py-6 lg:py-3 bg-bar-gold border-[3px] lg:border-2 border-bar-gold rounded-full text-bar-dark text-3xl sm:text-4xl lg:text-base font-black lg:font-semibold
                          transition-all duration-300 hover:bg-transparent hover:text-bar-gold disabled:opacity-50 disabled:cursor-not-allowed" 
                   id="recommend-btn">おすすめを表示</button>
@@ -195,15 +247,47 @@
     let availableTags = [];
     let allMenuData = { items: [], total: 0, updatedAt: '' };
     
+    // キャッシュ（セッション中有効）
+    let menuDataCache = {}; // カテゴリごとのメニューデータキャッシュ { category: menuData }
+    let tagsCache = {}; // カテゴリごとのタグキャッシュ { category: [tags] }
+    
+    // クイックフィルタの定義（一元管理）
+    const AROMA_OPTIONS = {
+      'smoky': 'スモーキー（Smoky）- ピートを焚いたような燻製香。アイラ系に多い',
+      'peaty': 'ピーティ（Peaty）- スモークよりも泥炭の香りが強い。土っぽく、薬品っぽい印象も',
+      'fruity': 'フルーティ（Fruity）- 果実のような甘酸っぱい香り。リンゴ、洋梨、桃など',
+      'floral': 'フローラル（Floral）- 花のような華やかで繊細な香り',
+      'honey': 'ハニー（Honeyed）- はちみつのような甘く丸い香り',
+      'spicy': 'スパイシー（Spicy）- 胡椒やナツメグのような刺激。樽由来',
+      'malty': 'モルティ（Malty）- 麦芽そのものの甘い穀物香',
+      'woody': 'ウッディ（Woody / Oaky）- 熟成樽由来の木の香り、バニラ香、タンニン'
+    };
+    
+    const TASTE_OPTIONS = {
+      'sweet': 'スウィート（Sweet）- バニラ、キャラメル、ハチミツのような甘み',
+      'dry': 'ドライ（Dry）- 甘さ控えめでキレのある印象',
+      'rich': 'リッチ（Rich）- 濃厚で複雑。熟成感のある味わい',
+      'light': 'ライト（Light）- 軽やかで飲みやすい',
+      'oily': 'オイリー（Oily）- 舌にまとわりつくようなコク',
+      'nutty': 'ナッティ（Nutty）- アーモンド、ヘーゼルナッツなどの香ばしさ',
+      'smoky_taste': 'スモーキー / ピーティ - 香りだけでなく、味にも煙感・薬草感が出る',
+      'chocolatey': 'チョコレーティ（Chocolatey）- カカオやビターチョコのような風味'
+    };
+    
     let currentTab = 'menu';
     let filters = {
       keyword: '',
       maker: '',
       category: '',
       type: '',
+      tags: [], // メニュー検索用タグフィルタ
       recommendPrefs: {
         selectedTags: [],
-        memo: ''
+        memo: '',
+        quickFilters: {
+          aroma: '', // 香り
+          taste: ''  // 味わい
+        }
       }
     };
     
@@ -211,6 +295,7 @@
     document.addEventListener('DOMContentLoaded', function() {
       initTabs();
       initRecommend();
+      initQuickFilterOptions();
       
       // サーバーからカテゴリのみを取得
       showLoading();
@@ -230,8 +315,15 @@
           console.log('[init] Categories count:', categories.length);
           
           renderCategoryButtons();
-          showCategorySelectionMessage();
-          hideLoading();
+          
+          // カテゴリが1件の場合は自動選択
+          if (categories.length === 1) {
+            console.log('[init] Auto-selecting single category:', categories[0]);
+            handleCategorySelect(categories[0]);
+          } else {
+            showCategorySelectionMessage();
+            hideLoading();
+          }
         })
         .withFailureHandler(function(error) {
           console.error('[init] Categories fetch failed:', error);
@@ -260,6 +352,14 @@
     
     function hideLoading() {
       // renderMenu()が呼ばれるので特に処理不要
+    }
+    
+    function showLoadingInTabArea() {
+      document.getElementById('tab-loading').classList.remove('hidden');
+    }
+    
+    function hideLoadingInTabArea() {
+      document.getElementById('tab-loading').classList.add('hidden');
     }
     
     // カテゴリボタンのレンダリング
@@ -303,83 +403,115 @@
       filters.type = '';
       filters.maker = '';
       filters.keyword = '';
+      filters.tags = []; // メニュー検索用タグもリセット
       filters.recommendPrefs.selectedTags = [];
       
       renderCategoryButtons();
       
-      // ローディング表示
-      showLoading();
+      // タブとタブコンテンツを全て非表示にする
+      document.getElementById('main-tabs').classList.add('hidden');
+      document.getElementById('menu-tab').classList.add('hidden');
+      document.getElementById('recommend-tab').classList.add('hidden');
       
-      // カテゴリのデータとタグを並行取得
-      let menuDataReceived = false;
-      let tagsReceived = false;
-      let hasError = false;
+      // 検索フィルタとおすすめフォームも非表示
+      document.getElementById('search-filters').classList.add('hidden');
+      document.getElementById('recommend-form').classList.add('hidden');
+      document.getElementById('recommend-no-category').classList.add('hidden');
       
-      // メニューデータを取得
-      google.script.run
-        .withSuccessHandler(function(data) {
-          if (hasError) return;
-          
-          console.log('[handleCategorySelect] Data received:', data);
-          
-          if (!data || !data.items) {
-            hasError = true;
-            showError('データの形式が不正です');
-            return;
-          }
-          
-          menuData = data;
-          console.log('[handleCategorySelect] Menu items count:', menuData.items.length);
-          menuDataReceived = true;
-          
-          // 両方取得完了したら初期化
-          if (tagsReceived) {
+      // ローディング表示（タブエリアに表示）
+      showLoadingInTabArea();
+      
+      // メニューデータを取得（キャッシュがあればそれを使う）
+      if (menuDataCache[category]) {
+        // キャッシュがある場合はすぐに使用
+        console.log('[handleCategorySelect] Using cached menu data for category:', category);
+        menuData = menuDataCache[category];
+        console.log('[handleCategorySelect] Menu items count from cache:', menuData.items.length);
+        
+        // メニューデータが取得できたらすぐに画面を表示
+        initAfterCategorySelect();
+      } else {
+        // キャッシュがない場合はAPIから取得
+        console.log('[handleCategorySelect] Fetching menu data for category:', category);
+        google.script.run
+          .withSuccessHandler(function(data) {
+            console.log('[handleCategorySelect] Data received:', data);
+            
+            if (!data || !data.items) {
+              showError('データの形式が不正です');
+              hideLoadingInTabArea();
+              return;
+            }
+            
+            menuData = data;
+            menuDataCache[category] = data; // キャッシュに保存
+            console.log('[handleCategorySelect] Menu items count:', menuData.items.length);
+            console.log('[handleCategorySelect] Menu data cached for category:', category);
+            
+            // メニューデータが取得できたらすぐに画面を表示
             initAfterCategorySelect();
-          }
-        })
-        .withFailureHandler(function(error) {
-          if (hasError) return;
-          hasError = true;
-          console.error('[handleCategorySelect] Data fetch failed:', error);
-          hideLoading();
-          showError('データの読み込みに失敗しました: ' + error.message);
-        })
-        .getMenuDataForClient({ category: category });
+          })
+          .withFailureHandler(function(error) {
+            console.error('[handleCategorySelect] Data fetch failed:', error);
+            hideLoadingInTabArea();
+            showError('データの読み込みに失敗しました: ' + error.message);
+          })
+          .getMenuDataForClient({ category: category });
+      }
       
-      // タグを取得
-      google.script.run
-        .withSuccessHandler(function(data) {
-          if (hasError) return;
-          
-          console.log('[handleCategorySelect] Tags received:', data);
-          
-          if (!data || !Array.isArray(data.tags)) {
-            hasError = true;
-            showError('タグデータの形式が不正です');
-            return;
-          }
-          
-          availableTags = data.tags;
-          console.log('[handleCategorySelect] Available tags count:', availableTags.length);
-          tagsReceived = true;
-          
-          // 両方取得完了したら初期化
-          if (menuDataReceived) {
-            initAfterCategorySelect();
-          }
-        })
-        .withFailureHandler(function(error) {
-          if (hasError) return;
-          hasError = true;
-          console.error('[handleCategorySelect] Tags fetch failed:', error);
-          hideLoading();
-          showError('タグの読み込みに失敗しました: ' + error.message);
-        })
-        .getTagsForCategory(category);
+      // タグを取得（キャッシュがあればそれを使う）
+      if (tagsCache[category]) {
+        // キャッシュがある場合はすぐに使用
+        console.log('[handleCategorySelect] Using cached tags for category:', category);
+        availableTags = tagsCache[category];
+        initMenuTagFilter();
+      } else {
+        // キャッシュがない場合はAPIから取得
+        console.log('[handleCategorySelect] Fetching tags for category:', category);
+        google.script.run
+          .withSuccessHandler(function(data) {
+            console.log('[handleCategorySelect] Tags received:', data);
+            
+            if (!data || !Array.isArray(data.tags)) {
+              console.warn('[handleCategorySelect] Tags data is invalid, using empty array');
+              availableTags = [];
+              tagsCache[category] = [];
+              return;
+            }
+            
+            availableTags = data.tags;
+            tagsCache[category] = data.tags; // キャッシュに保存
+            console.log('[handleCategorySelect] Available tags count:', availableTags.length);
+            console.log('[handleCategorySelect] Tags cached for category:', category);
+            
+            // タグが取得できたらタグフィルタを更新
+            initMenuTagFilter();
+          })
+          .withFailureHandler(function(error) {
+            console.error('[handleCategorySelect] Tags fetch failed:', error);
+            // タグの取得失敗は致命的ではないので、空配列で続行
+            availableTags = [];
+            tagsCache[category] = []; // 空でもキャッシュして再試行を防ぐ
+          })
+          .getTagsForCategory(category);
+      }
     }
     
     // カテゴリ選択後の初期化処理
     function initAfterCategorySelect() {
+      // ローディングを非表示
+      hideLoadingInTabArea();
+      
+      // タブを表示
+      document.getElementById('main-tabs').classList.remove('hidden');
+      
+      // タブコンテンツを表示（現在のタブに応じて）
+      if (currentTab === 'menu') {
+        document.getElementById('menu-tab').classList.remove('hidden');
+      } else {
+        document.getElementById('recommend-tab').classList.remove('hidden');
+      }
+      
       // フィルタとボタンを初期化
       initSearchFilters();
       
@@ -460,6 +592,9 @@
       const keywordInput = document.getElementById('keyword-input');
       keywordInput.value = '';
       
+      // タグ選択を初期化
+      initMenuTagFilter();
+      
       // 検索ボタン
       const searchBtn = document.getElementById('search-btn');
       searchBtn.onclick = function() {
@@ -472,24 +607,102 @@
       // リセットボタン
       const resetBtn = document.getElementById('reset-btn');
       resetBtn.onclick = function() {
-        filters.category = '';
+        // カテゴリは保持、検索条件のみリセット
         filters.type = '';
         filters.maker = '';
         filters.keyword = '';
+        filters.tags = [];
         
-        // メニュータブ: 検索フィルタを非表示
-        document.getElementById('search-filters').classList.add('hidden');
+        // フォームをリセット
+        typeSelect.value = '';
+        makerSelect.value = '';
+        keywordInput.value = '';
         
-        // おすすめタブ: フォームを非表示、メッセージを表示
-        document.getElementById('recommend-form').classList.add('hidden');
-        document.getElementById('recommend-no-category').classList.remove('hidden');
+        // タグ選択もリセット
+        const tagSelect = document.getElementById('menu-tag-select');
+        if (tagSelect) {
+          tagSelect.selectedIndex = -1; // 全選択解除
+        }
         
-        // カテゴリボタンをリセット
-        renderCategoryButtons();
-        
-        // メッセージを表示
-        showCategorySelectionMessage();
+        // メニューを再表示
+        renderMenu();
       };
+    }
+    
+    // メニュー検索用タグフィルタ初期化
+    function initMenuTagFilter() {
+      const container = document.getElementById('menu-tag-filter-container');
+      if (!container) return;
+      
+      // タグがない場合は非表示
+      if (availableTags.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+      
+      // タグ選択ドロップダウンを生成（最大5件選択可）
+      container.innerHTML = '<div>' +
+        '<label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">タグ（味わいなど）' +
+        '<span class="ml-2 text-lg lg:text-xs text-neutral-500">最大5件まで選択可</span></label>' +
+        '<select id="menu-tag-select" multiple ' +
+        'class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base ' +
+        'focus:outline-none focus:border-bar-gold transition-colors min-h-[200px] lg:min-h-[150px]">' +
+        availableTags.map(tag => {
+          const isSelected = filters.tags.includes(tag);
+          return '<option value="' + escapeHtml(tag) + '"' + (isSelected ? ' selected' : '') + '>' + escapeHtml(tag) + '</option>';
+        }).join('') +
+        '</select>' +
+      '</div>';
+      
+      // イベントリスナーを追加
+      const tagSelect = document.getElementById('menu-tag-select');
+      if (tagSelect) {
+        tagSelect.addEventListener('change', function() {
+          handleMenuTagSelectChange(this);
+        });
+      }
+    }
+    
+    // メニュー検索用タグ選択の変更（最大5件制限）
+    function handleMenuTagSelectChange(selectElement) {
+      const selectedOptions = Array.from(selectElement.selectedOptions);
+      
+      // 最大5件まで
+      if (selectedOptions.length > 5) {
+        // 最新の選択を解除
+        selectedOptions[selectedOptions.length - 1].selected = false;
+        alert('タグは最大5件まで選択できます。');
+        return;
+      }
+      
+      filters.tags = selectedOptions.map(option => option.value);
+    }
+    
+    // クイックフィルタのオプションを動的に生成
+    function initQuickFilterOptions() {
+      // 香りのオプション生成
+      const aromaSelect = document.getElementById('aroma-select');
+      if (aromaSelect) {
+        aromaSelect.innerHTML = '<option value="">未選択</option>';
+        Object.keys(AROMA_OPTIONS).forEach(key => {
+          const option = document.createElement('option');
+          option.value = key;
+          option.textContent = AROMA_OPTIONS[key];
+          aromaSelect.appendChild(option);
+        });
+      }
+      
+      // 味わいのオプション生成
+      const tasteSelect = document.getElementById('taste-select');
+      if (tasteSelect) {
+        tasteSelect.innerHTML = '<option value="">未選択</option>';
+        Object.keys(TASTE_OPTIONS).forEach(key => {
+          const option = document.createElement('option');
+          option.value = key;
+          option.textContent = TASTE_OPTIONS[key];
+          tasteSelect.appendChild(option);
+        });
+      }
     }
     
     // レコメンド初期化（初回のみ）
@@ -499,58 +712,30 @@
       recommendBtn.addEventListener('click', function() {
         handleRecommend();
       });
+      
+      // クイックフィルタのドロップダウン
+      const aromaSelect = document.getElementById('aroma-select');
+      const tasteSelect = document.getElementById('taste-select');
+      
+      if (aromaSelect) {
+        aromaSelect.addEventListener('change', function() {
+          filters.recommendPrefs.quickFilters.aroma = this.value;
+          console.log('[initRecommend] Aroma filter changed:', this.value);
+        });
+      }
+      
+      if (tasteSelect) {
+        tasteSelect.addEventListener('change', function() {
+          filters.recommendPrefs.quickFilters.taste = this.value;
+          console.log('[initRecommend] Taste filter changed:', this.value);
+        });
+      }
     }
     
     // レコメンドフィルタ初期化（カテゴリ選択ごと）
     function initRecommendFilters() {
-      const container = document.getElementById('quick-filter-container');
-      if (!container) return;
-      
-      // タグがない場合は非表示
-      if (availableTags.length === 0) {
-        container.innerHTML = '';
-        return;
-      }
-      
-      // クイックフィルタを生成
-      container.innerHTML = '<div>' +
-        '<label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">クイックフィルタ（味わい）' +
-        '<span class="ml-2 text-lg lg:text-xs text-neutral-500">複数選択可</span></label>' +
-        '<div id="tag-buttons" class="flex flex-wrap gap-4 lg:gap-2 mt-4 lg:mt-2">' +
-        availableTags.map(tag => {
-          const isSelected = filters.recommendPrefs.selectedTags.includes(tag);
-          return '<button class="tag-filter-btn px-6 sm:px-7 lg:px-4 py-4 lg:py-2 rounded-full text-xl sm:text-2xl lg:text-sm font-bold lg:font-medium transition-all duration-300 ' +
-            (isSelected 
-              ? 'bg-bar-gold border-[3px] lg:border-2 border-bar-gold text-bar-dark' 
-              : 'bg-transparent border-2 lg:border border-neutral-700 text-bar-gray hover:border-bar-gold hover:text-bar-gold') +
-            '" data-tag="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '</button>';
-        }).join('') +
-        '</div>' +
-      '</div>';
-      
-      // イベントリスナーを追加
-      container.querySelectorAll('.tag-filter-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const tag = this.getAttribute('data-tag');
-          handleTagToggle(tag);
-        });
-      });
-    }
-    
-    // タグの選択/解除
-    function handleTagToggle(tag) {
-      const index = filters.recommendPrefs.selectedTags.indexOf(tag);
-      
-      if (index !== -1) {
-        // 解除
-        filters.recommendPrefs.selectedTags.splice(index, 1);
-      } else {
-        // 選択
-        filters.recommendPrefs.selectedTags.push(tag);
-      }
-      
-      // 再レンダリング
-      initRecommendFilters();
+      // おすすめタブではタグフィルタを使わない（フリーテキスト入力のみ）
+      // 特に何も処理しない
     }
     
     // メニュー表示
@@ -576,6 +761,15 @@
                  (item.maker && item.maker.toLowerCase().includes(keyword)) ||
                  (item.description && item.description.toLowerCase().includes(keyword)) ||
                  (item.tags && item.tags.some(tag => tag.toLowerCase().includes(keyword)));
+        });
+      }
+      
+      // タグフィルタ（AND検索：選択した全てのタグを持つアイテムのみ）
+      if (filters.tags && filters.tags.length > 0) {
+        items = items.filter(item => {
+          if (!item.tags || item.tags.length === 0) return false;
+          // 選択した全てのタグがアイテムのタグに含まれているか確認
+          return filters.tags.every(selectedTag => item.tags.includes(selectedTag));
         });
       }
       
@@ -630,11 +824,27 @@
       }
       
       const text = document.getElementById('recommend-text').value.trim();
+      const quickFilters = filters.recommendPrefs.quickFilters;
       
-      // フリーワードとクイックフィルタの両方が未入力の場合はエラー
-      if (!text && filters.recommendPrefs.selectedTags.length === 0) {
-        showError('フリーワードまたはクイックフィルタから1つ以上入力/選択してください');
+      // フリーワード、香り、味わいのいずれかが入力されていることを確認
+      if (!text && !quickFilters.aroma && !quickFilters.taste) {
+        showError('フリーワード、香り、味わいのいずれかを入力してください');
         return;
+      }
+      
+      // クイックフィルタの内容をテキストに追加
+      let memoWithFilters = text;
+      
+      // 香りの希望を追加
+      if (quickFilters.aroma && AROMA_OPTIONS[quickFilters.aroma]) {
+        if (memoWithFilters) memoWithFilters += '\n';
+        memoWithFilters += '【香りの希望】' + AROMA_OPTIONS[quickFilters.aroma];
+      }
+      
+      // 味わいの希望を追加
+      if (quickFilters.taste && TASTE_OPTIONS[quickFilters.taste]) {
+        if (memoWithFilters) memoWithFilters += '\n';
+        memoWithFilters += '【味わいの希望】' + TASTE_OPTIONS[quickFilters.taste];
       }
       
       // 全件を候補として送信（情報は最小限に）
@@ -650,8 +860,8 @@
       
       const request = {
         prefs: {
-          selectedTags: filters.recommendPrefs.selectedTags,
-          memo: text,
+          selectedTags: [], // タグフィルタは使わない
+          memo: memoWithFilters,
           category: filters.category
         },
         candidates: candidates
@@ -728,7 +938,7 @@
                   '<h3 class="text-4xl sm:text-5xl lg:text-2xl text-gray-100 font-black lg:font-semibold tracking-wide mb-4 lg:mb-2">' + escapeHtml(menuItem.name) + '</h3>' +
                   '<p class="text-2xl sm:text-3xl lg:text-base text-bar-gold font-bold lg:font-medium mb-6 lg:mb-4">' + escapeHtml(menuItem.maker) + '</p>' +
                   '<p class="text-2xl sm:text-3xl lg:text-base text-bar-gray leading-relaxed">' + escapeHtml(item.reason) + '</p>' +
-                  (item.serve ? '<p class="text-xl lg:text-sm text-neutral-400 mt-4 lg:mt-3">提供方法: ' + escapeHtml(item.serve) + '</p>' : '') +
+                  (item.serve ? '<p class="text-xl lg:text-sm text-neutral-400 mt-4 lg:mt-3">おすすめの提供方法: ' + escapeHtml(item.serve) + '</p>' : '') +
                 '</div>' +
                 '<div><button class="w-full px-6 py-5 lg:px-4 lg:py-2.5 bg-transparent border-[3px] lg:border-2 border-bar-gold rounded-full text-bar-gold text-2xl sm:text-3xl lg:text-sm font-black lg:font-medium transition-all duration-300 hover:bg-bar-gold hover:text-bar-dark" onclick="showDetailModal(\'' + menuItem.id + '\'); event.stopPropagation();">詳しく見る</button></div>' +
               '</div>' +

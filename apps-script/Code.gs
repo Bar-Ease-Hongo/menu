@@ -16,8 +16,8 @@ const EXISTING_HEADERS = [
 ];
 
 const NEW_HEADERS = [
-  '公開カテゴリ', '公開タイプ', '公開商品名', '公開メーカー', '公開タグ', '公開説明文',
-  '公開度数',
+  '公開カテゴリ', '公開国', '公開メーカー', '公開蒸溜所', '公開タイプ', '公開商品名', 
+  '公開説明文', '公開樽種', '公開熟成期間', '公開度数', '公開タグ',
   'AI補完状態', 'メニュー表示状態'
 ];
 
@@ -166,7 +166,7 @@ function getMenuDataForClient(options) {
 }
 
 /**
- * メニューキャッシュをクリア
+ * メニューキャッシュをクリア（タグキャッシュも含む）
  */
 function clearMenuCache() {
   const cache = CacheService.getScriptCache();
@@ -177,16 +177,22 @@ function clearMenuCache() {
   // メニューデータキャッシュをクリア（全体とカテゴリ別）
   cache.remove('menuData');
   
-  // カテゴリ別のキャッシュもクリア（既知のカテゴリに対して）
-  // 完全にクリアするため、すべてのキャッシュをクリア
+  // タグキャッシュをクリア（カテゴリ別）
+  // カテゴリ一覧を取得してタグキャッシュをクリア
   try {
-    cache.removeAll(['categories', 'menuData']);
+    const categories = getCategoriesForClient().categories || [];
+    categories.forEach(category => {
+      const menuDataKey = 'menuData_' + category;
+      const tagsKey = 'tags_' + category;
+      cache.remove(menuDataKey);
+      cache.remove(tagsKey);
+      Logger.log('[clearMenuCache] cleared cache for category: ' + category);
+    });
   } catch (error) {
-    // エラーは無視（一部の環境で使えない場合がある）
-    Logger.log('[clearMenuCache] removeAll failed, using individual remove: ' + error.message);
+    Logger.log('[clearMenuCache] error clearing category caches: ' + error.message);
   }
   
-  Logger.log('[clearMenuCache] menu and category cache cleared');
+  Logger.log('[clearMenuCache] menu, tags and category cache cleared');
 }
 
 /**
@@ -262,6 +268,20 @@ function getTagsForCategory(category) {
   try {
     Logger.log('[getTagsForCategory] start with category: ' + category);
     
+    const cache = CacheService.getScriptCache();
+    const cacheKey = 'tags_' + category;
+    
+    // キャッシュから取得を試みる
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      Logger.log('[getTagsForCategory] cache hit for key: ' + cacheKey);
+      const data = JSON.parse(cached);
+      Logger.log('[getTagsForCategory] returning ' + data.tags.length + ' tags from cache');
+      return data;
+    }
+    
+    // キャッシュがない場合はスプレッドシートから取得
+    Logger.log('[getTagsForCategory] cache miss, fetching from sheet');
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('メニュー');
     if (!sheet) {
       Logger.log('[getTagsForCategory] sheet not found');
@@ -308,10 +328,21 @@ function getTagsForCategory(category) {
     
     Logger.log('[getTagsForCategory] found ' + tags.length + ' tags: ' + tags.join(', '));
     
-    return {
+    const result = {
       tags: tags,
       updatedAt: new Date().toISOString()
     };
+    
+    // 10分間キャッシュ（600秒）
+    try {
+      cache.put(cacheKey, JSON.stringify(result), 600);
+      Logger.log('[getTagsForCategory] cached for 600 seconds with key: ' + cacheKey);
+    } catch (cacheError) {
+      Logger.log('[getTagsForCategory] cache put failed: ' + cacheError.message);
+      // キャッシュ失敗してもデータは返す
+    }
+    
+    return result;
   } catch (error) {
     Logger.log('[getTagsForCategory] error: ' + error.message);
     Logger.log('[getTagsForCategory] stack: ' + error.stack);
@@ -393,11 +424,37 @@ function getMenuData(sheet, filterCategory) {
     const publishedAbv = row[colIndex('公開度数')];
     const sourceAbv = row[colIndex('度数')];
     const abvStr = String(publishedAbv || sourceAbv || '').replace(/[^0-9.]/g, '');
-    const alcoholVolume = abvStr ? parseFloat(abvStr) : undefined;
+    let alcoholVolume = abvStr ? parseFloat(abvStr) : undefined;
+    
+    // スプレッドシートのパーセント形式は小数で保存されているため、1未満の場合は100倍
+    if (alcoholVolume !== undefined && alcoholVolume < 1) {
+      alcoholVolume = alcoholVolume * 100;
+    }
+    
+    // 浮動小数点の精度問題を回避するため、小数点以下1桁に丸める
+    if (alcoholVolume !== undefined) {
+      alcoholVolume = Math.round(alcoholVolume * 10) / 10;
+    }
     
     const price30ml = parseFloat(String(row[colIndex('30ml')] || '').replace(/[^0-9.]/g, '')) || undefined;
     const price15ml = parseFloat(String(row[colIndex('15ml')] || '').replace(/[^0-9.]/g, '')) || undefined;
     const price10ml = parseFloat(String(row[colIndex('10ml')] || '').replace(/[^0-9.]/g, '')) || undefined;
+    
+    const publishedCountry = row[colIndex('公開国')];
+    const sourceCountry = row[colIndex('国')];
+    const country = publishedCountry || sourceCountry || '';
+    
+    const publishedDistillery = row[colIndex('公開蒸溜所')];
+    const sourceDistillery = row[colIndex('蒸溜所')];
+    const distillery = publishedDistillery || sourceDistillery || '';
+    
+    const publishedCaskType = row[colIndex('公開樽種')];
+    const sourceCaskType = row[colIndex('樽種')];
+    const caskType = publishedCaskType || sourceCaskType || '';
+    
+    const publishedMaturationPeriod = row[colIndex('公開熟成期間')];
+    const sourceMaturationPeriod = row[colIndex('熟成期間')];
+    const maturationPeriod = publishedMaturationPeriod || sourceMaturationPeriod || '';
     
     items.push({
       id: String(rowNumber),
@@ -411,10 +468,10 @@ function getMenuData(sheet, filterCategory) {
       price30ml,
       price15ml,
       price10ml,
-      country: row[colIndex('国')] || '',
-      distillery: row[colIndex('蒸溜所')] || '',
-      caskType: row[colIndex('樽種')] || '',
-      maturationPeriod: row[colIndex('熟成期間')] || ''
+      country,
+      distillery,
+      caskType,
+      maturationPeriod
     });
   });
   
@@ -853,7 +910,7 @@ function protectColumns(sheet, headers, names) {
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Bar Ease Hongo')
-    .addItem('AI補完を実行 (1行のみ)', 'requestAiCompletion')
+    .addItem('AI補完を実行 (最大10件)', 'requestAiCompletion')
     .addSeparator()
     .addItem('メニューに表示', 'showInMenu')
     .addItem('メニューから非表示', 'hideFromMenu')
@@ -895,23 +952,36 @@ function handleSheetEdit(e) {
 function requestAiCompletion() {
   const sheet = SpreadsheetApp.getActiveSheet();
   const activeRange = sheet.getActiveRange();
-  const activeRow = activeRange.getRow();
+  const firstRow = activeRange.getRow();
   const lastRow = activeRange.getLastRow();
   
-  if (activeRow <= 1) {
+  if (firstRow <= 1) {
     SpreadsheetApp.getUi().alert('エラー', 'データ行を選択してください', SpreadsheetApp.getUi().ButtonSet.OK);
     return;
   }
   
+  // 選択行数を計算
+  const selectedRowCount = lastRow - firstRow + 1;
+  
+  // 10件を超える場合はエラー
+  if (selectedRowCount > 10) {
+    SpreadsheetApp.getUi().alert(
+      'エラー',
+      '一度に処理できるのは最大10件までです。\n\n現在の選択: ' + selectedRowCount + '件\n\n10件以下に絞って再度お試しください。',
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+    return;
+  }
+  
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const itemName = getItemName(sheet, activeRow, headers);
   
   // 確認ダイアログ
-  let confirmMessage = 'AI補完を実行します\n\n対象: ' + itemName + ' (' + activeRow + '行目)\n機能: 設定されていない値をAIで補完・修正します\n\n注意事項:\n• 即座にAI補完を実行し、結果を反映します\n• 処理には10〜30秒かかる場合があります\n• インターネット接続が必要です\n\n続行しますか？';
-  
-  // 複数行選択時の警告を追記
-  if (activeRow !== lastRow) {
-    confirmMessage = 'AI補完を実行します\n\n[注意] 複数行が選択されています\n選択範囲: ' + activeRow + '行目〜' + lastRow + '行目\n' + activeRow + '行目のみ処理されます\n\n対象: ' + itemName + ' (' + activeRow + '行目)\n機能: 設定されていない値をAIで補完・修正します\n\n注意事項:\n• 即座にAI補完を実行し、結果を反映します\n• 処理には10〜30秒かかる場合があります\n• インターネット接続が必要です\n\n続行しますか？';
+  let confirmMessage;
+  if (selectedRowCount === 1) {
+    const itemName = getItemName(sheet, firstRow, headers);
+    confirmMessage = 'AI補完を実行します\n\n対象: ' + itemName + ' (' + firstRow + '行目)\n機能: 設定されていない値をAIで補完・修正します\n\n注意事項:\n• 即座にAI補完を実行し、結果を反映します\n• 処理には10〜30秒かかる場合があります\n• インターネット接続が必要です\n\n続行しますか？';
+  } else {
+    confirmMessage = 'AI補完を実行します（バッチ処理）\n\n対象: ' + selectedRowCount + '件\n範囲: ' + firstRow + '行目〜' + lastRow + '行目\n機能: 設定されていない値をAIで補完・修正します\n\n注意事項:\n• 即座にAI補完を実行し、結果を反映します\n• 処理には30〜60秒かかる場合があります\n• インターネット接続が必要です\n\n続行しますか？';
   }
   
   const result = SpreadsheetApp.getUi().alert(
@@ -926,9 +996,6 @@ function requestAiCompletion() {
   const colIndex = (name) => headers.indexOf(name) + 1;
   const colAiStatus = colIndex('AI補完状態');
   
-  // source データ収集
-  const source = collectSourceData(sheet, activeRow, headers);
-  
   // Gemini API Key取得
   const apiKey = PropertiesService.getScriptProperties().getProperty(PROP_GEMINI_API_KEY);
   if (!apiKey) {
@@ -936,31 +1003,63 @@ function requestAiCompletion() {
     return;
   }
   
-  // AI補完状態を「依頼済み」に
-  sheet.getRange(activeRow, colAiStatus).setValue(AI_STATUS.REQUESTED);
+  // 全選択行のデータを収集
+  const batchItems = [];
+  for (let row = firstRow; row <= lastRow; row++) {
+    const source = collectSourceData(sheet, row, headers);
+    batchItems.push({
+      row: row,
+      data: source
+    });
+    
+    // AI補完状態を「依頼済み」に
+    sheet.getRange(row, colAiStatus).setValue(AI_STATUS.REQUESTED);
+  }
   SpreadsheetApp.flush();
   
   try {
-    // AI補完実行
-    const aiResult = callGeminiForCompletion_(apiKey, source);
+    // バッチでAI補完実行
+    const batchResults = callGeminiForBatchCompletion_(apiKey, batchItems);
     
-    // 公開列に反映
-    updatePublishedColumns(sheet, activeRow, headers, aiResult);
+    // 各行に結果を反映
+    let successCount = 0;
+    let failCount = 0;
     
-    // AI補完状態を「成功」に
-    sheet.getRange(activeRow, colAiStatus).setValue(AI_STATUS.SUCCESS);
+    batchResults.forEach((result, index) => {
+      const row = batchItems[index].row;
+      
+      if (result.success && result.data) {
+        // 公開列に反映
+        updatePublishedColumns(sheet, row, headers, result.data);
+        
+        // AI補完状態を「成功」に
+        sheet.getRange(row, colAiStatus).setValue(AI_STATUS.SUCCESS);
+        successCount++;
+      } else {
+        // エラー時は「失敗」に設定
+        sheet.getRange(row, colAiStatus).setValue(AI_STATUS.FAILED);
+        failCount++;
+      }
+    });
     
     // キャッシュクリア（次回アクセス時に最新データを取得）
     clearMenuCache();
     
-    SpreadsheetApp.getUi().alert(
-      'AI補完完了',
-      '対象: ' + itemName + '\n\nAI補完が完了し、公開列に反映しました。\n\n※ メニューに表示するには「メニューに表示」ボタンを押してください。',
-      SpreadsheetApp.getUi().ButtonSet.OK
-    );
+    // 結果表示
+    let resultMessage = 'AI補完が完了しました。\n\n';
+    resultMessage += '成功: ' + successCount + '件\n';
+    if (failCount > 0) {
+      resultMessage += '失敗: ' + failCount + '件\n';
+    }
+    resultMessage += '\n※ メニューに表示するには「メニューに表示」ボタンを押してください。';
+    
+    SpreadsheetApp.getUi().alert('AI補完完了', resultMessage, SpreadsheetApp.getUi().ButtonSet.OK);
+    
   } catch (error) {
-    // エラー時は「失敗」に設定
-    sheet.getRange(activeRow, colAiStatus).setValue(AI_STATUS.FAILED);
+    // エラー時は全行を「失敗」に設定
+    for (let row = firstRow; row <= lastRow; row++) {
+      sheet.getRange(row, colAiStatus).setValue(AI_STATUS.FAILED);
+    }
     SpreadsheetApp.getUi().alert('エラー', 'エラー: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
   }
 }
@@ -1238,8 +1337,15 @@ function collectSourceData(sheet, row, headers) {
     alcoholVolume: (function() {
       const value = sheet.getRange(row, colIndex('度数')).getValue();
       if (!value) return '';
-      const numeric = typeof value === 'number' ? value : parseFloat(String(value).replace(/[^0-9.]/g, ''));
-      return isNaN(numeric) ? '' : numeric;
+      let numeric = typeof value === 'number' ? value : parseFloat(String(value).replace(/[^0-9.]/g, ''));
+      if (isNaN(numeric)) return '';
+      // スプレッドシートのパーセント形式は小数で保存されているため、1未満の場合は100倍
+      if (numeric < 1) {
+        numeric = numeric * 100;
+      }
+      // 浮動小数点の精度問題を回避するため、小数点以下1桁に丸める
+      numeric = Math.round(numeric * 10) / 10;
+      return numeric;
     })(),
     country: sheet.getRange(row, colIndex('国')).getValue() || '',
     manufacturer: sheet.getRange(row, colIndex('製造会社')).getValue() || '',
@@ -1259,12 +1365,16 @@ function collectSourceData(sheet, row, headers) {
 }
 
 /**
- * Gemini APIでAI補完実行
+ * Gemini APIでAI補完実行（バッチ処理）
+ * @param {string} apiKey - Gemini API Key
+ * @param {Array} batchItems - [{ row: number, data: object }]
+ * @return {Array} [{ success: boolean, data?: object }]
  */
-function callGeminiForCompletion_(apiKey, source) {
+function callGeminiForBatchCompletion_(apiKey, batchItems) {
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' + apiKey;
   
-  const prompt = buildCompletionPrompt_(source);
+  // バッチプロンプト生成
+  const prompt = buildBatchCompletionPrompt_(batchItems);
   
   const payload = {
     contents: [{
@@ -1274,7 +1384,7 @@ function callGeminiForCompletion_(apiKey, source) {
     }],
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 8192, // バッチ処理用に増量（10件で約6000トークン想定）
       topP: 0.95,
       topK: 40
     }
@@ -1292,7 +1402,7 @@ function callGeminiForCompletion_(apiKey, source) {
   const responseText = response.getContentText();
   
   if (statusCode !== 200) {
-    Logger.log('[callGeminiForCompletion] error: ' + statusCode + ' ' + responseText);
+    Logger.log('[callGeminiForBatchCompletion] error: ' + statusCode + ' ' + responseText);
     
     // エラーレスポンスを解析
     try {
@@ -1317,17 +1427,9 @@ function callGeminiForCompletion_(apiKey, source) {
     }
   }
   
-  Logger.log('[callGeminiForCompletion] response: ' + responseText);
+  Logger.log('[callGeminiForBatchCompletion] response length: ' + responseText.length);
   
   const result = JSON.parse(responseText);
-  
-  // レスポンス構造をログ出力
-  Logger.log('[callGeminiForCompletion] result structure: ' + JSON.stringify({
-    hasCandidates: !!result.candidates,
-    candidatesLength: result.candidates ? result.candidates.length : 0,
-    hasContent: result.candidates && result.candidates.length > 0 && !!result.candidates[0].content,
-    hasParts: result.candidates && result.candidates.length > 0 && result.candidates[0].content && !!result.candidates[0].content.parts
-  }));
   
   if (!result.candidates || result.candidates.length === 0) {
     throw new Error('Gemini API returned no candidates. Response: ' + responseText.substring(0, 500));
@@ -1348,7 +1450,7 @@ function callGeminiForCompletion_(apiKey, source) {
     // outputフィールドがある場合
     text = candidate.output;
   } else {
-    Logger.log('[callGeminiForCompletion] Full response: ' + responseText);
+    Logger.log('[callGeminiForBatchCompletion] Full response: ' + responseText);
     throw new Error('テキストが見つかりません。finishReason: ' + (candidate.finishReason || 'unknown') + '. レスポンス全体はログを確認してください。');
   }
   
@@ -1356,11 +1458,119 @@ function callGeminiForCompletion_(apiKey, source) {
     throw new Error('空のテキストが返されました。finishReason: ' + (candidate.finishReason || 'unknown'));
   }
   
-  return extractJSON_(text);
+  // バッチレスポンスをパース
+  const batchResponse = extractJSON_(text);
+  
+  // 各アイテムの結果を構築
+  const results = [];
+  
+  if (Array.isArray(batchResponse.items)) {
+    // items配列形式の場合
+    batchResponse.items.forEach((item, index) => {
+      results.push({
+        success: true,
+        data: item
+      });
+    });
+  } else if (typeof batchResponse === 'object' && batchResponse.name) {
+    // 単一オブジェクト形式の場合（1件のみの処理）
+    results.push({
+      success: true,
+      data: batchResponse
+    });
+  }
+  
+  // 結果の件数が入力と一致しない場合、不足分を失敗として追加
+  while (results.length < batchItems.length) {
+    results.push({
+      success: false
+    });
+  }
+  
+  return results;
 }
 
 /**
- * AI補完プロンプト生成
+ * Gemini APIでAI補完実行（単一件・後方互換用）
+ */
+function callGeminiForCompletion_(apiKey, source) {
+  // バッチ処理を使用
+  const batchResult = callGeminiForBatchCompletion_(apiKey, [{ row: 0, data: source }]);
+  
+  if (batchResult.length > 0 && batchResult[0].success) {
+    return batchResult[0].data;
+  } else {
+    throw new Error('AI補完に失敗しました');
+  }
+}
+
+/**
+ * AI補完プロンプト生成（バッチ処理用）
+ */
+function buildBatchCompletionPrompt_(batchItems) {
+  let prompt = '以下の複数の「お酒（酒類）アイテム」の情報について、公式情報（メーカー公式サイト、正規輸入元、公式資料）を最優先に、欠損値または明らかに間違っている情報のみを補完・修正してください。\n\n';
+  
+  prompt += '補完対象:\n';
+  prompt += '- 空欄・未入力のフィールド\n';
+  prompt += '- 明らかに間違っている情報（例：存在しないメーカー名、不整合な度数、誤った国名など）\n';
+  prompt += '- 整合性のない情報（例：商品名とメーカーが一致しない、不可能な熟成年数など）\n\n';
+  
+  prompt += '既存値が妥当で正確な場合は変更せず、欠損または誤りがあるフィールドのみを返してください。\n\n';
+  
+  prompt += 'JSONスキーマ（各アイテムについて補完が必要なフィールドのみ返す）:\n';
+  prompt += '{\n';
+  prompt += '  "name": "商品名",\n';
+  prompt += '  "maker": "メーカー名（正規表記）",\n';
+  prompt += '  "category": "カテゴリ（酒種。例：ウイスキー／ラム／ジン／ビール／ワイン 等）",\n';
+  prompt += '  "type": "タイプ（酒種内の分類。例：ウイスキーならシングルモルト・ブレンデッド、ラムならダーク・ホワイト、ワインならフルボディ 等）",\n';
+  prompt += '  "description": "50〜80文字程度の説明（宣伝文句ではなく中立・簡潔）",\n';
+  prompt += '  "tags": ["3〜5個の味わい・特徴タグ（必ず日本語で。例：スモーキー、フルーティー、華やか、滑らか、ピーティー、バニラ、スパイシー）"],\n';
+  prompt += '  "country": "生産国（必ず和名で統一。例：スコットランド、アイルランド、アメリカ、日本）",\n';
+  prompt += '  "maturationPeriod": "熟成年数／期間（該当しない場合は空文字 \'\'）",\n';
+  prompt += '  "caskType": "樽種／熟成容器（該当しない場合は空文字 \'\'）",\n';
+  prompt += '  "alcoholVolume": "度数 (整数値、例: 43, 43.5)"\n';
+  prompt += '}\n\n';
+  
+  prompt += '前提・ポリシー:\n';
+  prompt += '- 公式情報を最優先。非公式情報しか見つからない場合は一般に妥当な定説を用いる。\n';
+  prompt += '- 不明な項目は空文字（\'\'）とし、N/Aや未定義などの文字列は使わない。\n';
+  prompt += '- 事実と推定が混同しないよう、description は断定的表現を避け簡潔に。\n';
+  prompt += '- 既存値が正確な場合は変更しない。\n';
+  prompt += '- **tagsは必ず日本語で記述してください。カタカナ語も含めて、すべて日本語で統一してください。**\n';
+  prompt += '- 必ず有効なJSONのみを返してください。説明文やコメントは一切含めないでください。\n\n';
+  
+  prompt += '重要: レスポンスは必ず以下の形式のJSON配列で返してください:\n';
+  prompt += '```json\n';
+  prompt += '{\n';
+  prompt += '  "items": [\n';
+  prompt += '    {\n';
+  prompt += '      "name": "商品名1",\n';
+  prompt += '      "maker": "メーカー名1",\n';
+  prompt += '      "category": "カテゴリ1",\n';
+  prompt += '      ...\n';
+  prompt += '    },\n';
+  prompt += '    {\n';
+  prompt += '      "name": "商品名2",\n';
+  prompt += '      "maker": "メーカー名2",\n';
+  prompt += '      "category": "カテゴリ2",\n';
+  prompt += '      ...\n';
+  prompt += '    }\n';
+  prompt += '  ]\n';
+  prompt += '}\n';
+  prompt += '```\n\n';
+  
+  prompt += '処理対象アイテム（' + batchItems.length + '件）:\n\n';
+  
+  batchItems.forEach((item, index) => {
+    prompt += '--- アイテム ' + (index + 1) + ' ---\n';
+    prompt += JSON.stringify(item.data, null, 2) + '\n\n';
+  });
+  
+  return prompt;
+}
+
+/**
+ * AI補完プロンプト生成（単一件・後方互換用）
  */
 function buildCompletionPrompt_(source) {
   return '以下の「お酒（酒類）アイテム」の情報について、公式情報（メーカー公式サイト、正規輸入元、公式資料）を最優先に、欠損値または明らかに間違っている情報のみを補完・修正してください。\n\n' +
@@ -1374,16 +1584,17 @@ function buildCompletionPrompt_(source) {
     '  "name": "商品名",\n' +
     '  "maker": "メーカー名（正規表記）",\n' +
     '  "category": "カテゴリ（酒種。例：ウイスキー／ラム／ジン／ビール／ワイン 等）",\n' +
-    '  "type": "タイプ（酒種内の分類。例：ウイスキーならシングルモルト・ブレンデッド、ラムならダーク・ホワイト 等）",\n' +
+    '  "type": "タイプ（酒種内の分類。例：ウイスキーならシングルモルト・ブレンデッド、ラムならダーク・ホワイト、ワインならフルボディ 等）",\n' +
     '  "description": "50〜80文字程度の説明（宣伝文句ではなく中立・簡潔）",\n' +
     '  "tags": ["3〜5個の味わい・特徴タグ（必ず日本語で。例：スモーキー、フルーティー、華やか、滑らか、ピーティー、バニラ、スパイシー）"],\n' +
     '  "country": "生産国（必ず和名で統一。例：スコットランド、アイルランド、アメリカ、日本）",\n' +
-    '  "maturationPeriod": "熟成年数／期間（該当しない場合は \'N/A\' 等）",\n' +
-    '  "caskType": "樽種／熟成容器（該当しない場合は \'N/A\' 等）",\n' +
+    '  "maturationPeriod": "熟成年数／期間（該当しない場合は空文字 \'\'）",\n' +
+    '  "caskType": "樽種／熟成容器（該当しない場合は空文字 \'\'）",\n' +
     '  "alcoholVolume": "度数 (整数値、例: 43, 43.5)"\n' +
     '}\n\n' +
     '前提・ポリシー:\n' +
     '- 公式情報を最優先。非公式情報しか見つからない場合は一般に妥当な定説を用いる。\n' +
+    '- 不明な項目は空文字（\'\'）とし、N/Aや未定義などの文字列は使わない。\n' +
     '- 事実と推定が混同しないよう、description は断定的表現を避け簡潔に。\n' +
     '- 既存値が正確な場合は変更しない。\n' +
     '- **tagsは必ず日本語で記述してください。カタカナ語も含めて、すべて日本語で統一してください。**\n' +
@@ -1433,6 +1644,31 @@ function updatePublishedColumns(sheet, row, headers, aiResult) {
       sheet.getRange(row, colIndex('公開度数')).setValue(abvValue + '%');
     }
   }
+  if (aiResult.country) {
+    const countryValue = String(aiResult.country).trim();
+    // N/Aや類似の文字列は空欄にする
+    if (countryValue && countryValue !== 'N/A' && countryValue !== 'n/a' && countryValue !== '-') {
+      sheet.getRange(row, colIndex('公開国')).setValue(countryValue);
+    }
+  }
+  if (aiResult.distillery) {
+    const distilleryValue = String(aiResult.distillery).trim();
+    if (distilleryValue && distilleryValue !== 'N/A' && distilleryValue !== 'n/a' && distilleryValue !== '-') {
+      sheet.getRange(row, colIndex('公開蒸溜所')).setValue(distilleryValue);
+    }
+  }
+  if (aiResult.caskType) {
+    const caskTypeValue = String(aiResult.caskType).trim();
+    if (caskTypeValue && caskTypeValue !== 'N/A' && caskTypeValue !== 'n/a' && caskTypeValue !== '-') {
+      sheet.getRange(row, colIndex('公開樽種')).setValue(caskTypeValue);
+    }
+  }
+  if (aiResult.maturationPeriod) {
+    const maturationValue = String(aiResult.maturationPeriod).trim();
+    if (maturationValue && maturationValue !== 'N/A' && maturationValue !== 'n/a' && maturationValue !== '-') {
+      sheet.getRange(row, colIndex('公開熟成期間')).setValue(maturationValue);
+    }
+  }
 }
 
 // ===== ユーティリティ関数 =====
@@ -1454,4 +1690,3 @@ function getItemName(sheet, row, headers) {
   
   return '商品名なし';
 }
-
