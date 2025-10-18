@@ -71,43 +71,62 @@
     <!-- ヘッダー -->
     <header class="mb-6 sm:mb-8 py-6 sm:py-8 border-b border-bar-gray-dark">
       <h1 class="text-6xl sm:text-6xl lg:text-5xl text-bar-gold font-serif font-black lg:font-bold mb-4 lg:mb-2">Bar Ease Hongo</h1>
-      <p class="text-2xl sm:text-3xl lg:text-base text-bar-gray font-medium">プレミアムウイスキー＆スピリッツ</p>
+      <p class="text-2xl sm:text-3xl lg:text-base text-bar-gray font-medium">心に残る一杯との出会いを。</p>
     </header>
+    
+    <!-- カテゴリ選択（共通） -->
+    <div class="mb-6 sm:mb-8">
+      <h2 class="text-2xl sm:text-3xl lg:text-base text-bar-gray mb-4 lg:mb-3 font-bold lg:font-semibold">カテゴリを選択</h2>
+      <div id="category-buttons" class="flex flex-wrap gap-3 lg:gap-2">
+        <!-- カテゴリボタンは動的に生成 -->
+      </div>
+    </div>
     
     <!-- タブ -->
     <div class="flex gap-4 sm:gap-5 lg:gap-3 mb-6 sm:mb-8 border-b-2 border-bar-gray-dark overflow-x-auto">
       <button class="tab-btn px-7 sm:px-8 lg:px-6 py-5 lg:py-3 text-2xl sm:text-3xl lg:text-base text-bar-gray border-b-2 border-transparent transition-all duration-300 hover:text-bar-gold whitespace-nowrap font-bold lg:font-semibold" 
               data-tab="menu">メニュー一覧</button>
       <button class="tab-btn px-7 sm:px-8 lg:px-6 py-5 lg:py-3 text-2xl sm:text-3xl lg:text-base text-bar-gray border-b-2 border-transparent transition-all duration-300 hover:text-bar-gold whitespace-nowrap font-bold lg:font-semibold" 
-              data-tab="recommend">AIおすすめ</button>
+              data-tab="recommend">おすすめ</button>
     </div>
     
     <!-- メニュー一覧タブ -->
     <div id="menu-tab" class="tab-content">
-      <div class="bg-black/40 border border-bar-gray-dark rounded-xl p-6 sm:p-7 lg:p-5 mb-6 sm:mb-8 backdrop-blur-sm">
+      <!-- 検索フィルタ（カテゴリ選択後に表示） -->
+      <div id="search-filters" class="hidden bg-black/40 border border-bar-gray-dark rounded-xl p-6 sm:p-7 lg:p-5 mb-6 sm:mb-8 backdrop-blur-sm">
         <div class="space-y-6 lg:space-y-4">
+          <div>
+            <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">タイプ</label>
+            <select id="type-select" 
+                    class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base
+                           focus:outline-none focus:border-bar-gold transition-colors">
+              <option value="">すべて</option>
+            </select>
+          </div>
+          <div>
+            <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">メーカー</label>
+            <select id="maker-select" 
+                    class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base
+                           focus:outline-none focus:border-bar-gold transition-colors">
+              <option value="">すべて</option>
+            </select>
+          </div>
           <div>
             <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">キーワード検索</label>
             <input type="text" id="keyword-input" 
                    class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base
                           focus:outline-none focus:border-bar-gold transition-colors"
                    placeholder="商品名、メーカー、説明文で検索...">
-        </div>
-          <div>
-            <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">メーカー</label>
-            <select id="maker-select" 
-                    class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base
-                           focus:outline-none focus:border-bar-gold transition-colors">
-            <option value="">すべて</option>
-          </select>
-        </div>
-          <div>
-            <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">カテゴリ</label>
-            <select id="category-select" 
-                    class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base
-                           focus:outline-none focus:border-bar-gold transition-colors">
-            <option value="">すべて</option>
-          </select>
+          </div>
+          <div class="flex gap-3 lg:gap-2">
+            <button id="search-btn" class="flex-1 px-7 sm:px-8 lg:px-6 py-6 lg:py-3 bg-bar-gold border-[3px] lg:border-2 border-bar-gold rounded-full text-bar-dark text-3xl sm:text-4xl lg:text-base font-black lg:font-semibold
+                           transition-all duration-300 hover:bg-transparent hover:text-bar-gold">
+              検索
+            </button>
+            <button id="reset-btn" class="px-7 sm:px-8 lg:px-6 py-6 lg:py-3 bg-transparent border-[3px] lg:border-2 border-neutral-700 rounded-full text-bar-gray text-2xl sm:text-3xl lg:text-sm font-bold lg:font-medium
+                           transition-all duration-300 hover:border-bar-gold hover:text-bar-gold">
+              リセット
+            </button>
           </div>
         </div>
       </div>
@@ -116,9 +135,10 @@
       <div id="menu-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6 mb-8"></div>
     </div>
     
-    <!-- AIおすすめタブ -->
+    <!-- おすすめタブ -->
     <div id="recommend-tab" class="tab-content hidden">
-      <div class="bg-black/40 border border-bar-gray-dark rounded-xl p-6 sm:p-7 lg:p-5 mb-6 sm:mb-8 backdrop-blur-sm">
+      <!-- おすすめフォーム（カテゴリ選択後に表示） -->
+      <div id="recommend-form" class="hidden bg-black/40 border border-bar-gray-dark rounded-xl p-6 sm:p-7 lg:p-5 mb-6 sm:mb-8 backdrop-blur-sm">
         <div class="space-y-6 lg:space-y-4">
           <div>
             <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">気分や好みを自由に入力</label>
@@ -127,39 +147,25 @@
                              focus:outline-none focus:border-bar-gold transition-colors resize-y min-h-[180px] lg:min-h-[100px]"
                       placeholder="例: スモーキーでフルーティー、甘さ控えめのものが飲みたい"></textarea>
         </div>
-          <div>
-            <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">クイックフィルタ</label>
-            <div class="flex flex-wrap gap-4 lg:gap-2 mt-4 lg:mt-2">
-              <button class="filter-btn px-6 sm:px-7 lg:px-4 py-4 lg:py-2 bg-transparent border-2 lg:border border-neutral-700 rounded-full text-bar-gray text-xl sm:text-2xl lg:text-sm
-                             transition-all duration-300 hover:border-bar-gold hover:text-bar-gold font-bold lg:font-medium" 
-                      data-filter="base" data-value="ウイスキー">ウイスキー</button>
-              <button class="filter-btn px-6 sm:px-7 lg:px-4 py-4 lg:py-2 bg-transparent border-2 lg:border border-neutral-700 rounded-full text-bar-gray text-xl sm:text-2xl lg:text-sm
-                             transition-all duration-300 hover:border-bar-gold hover:text-bar-gold font-bold lg:font-medium" 
-                      data-filter="base" data-value="ラム">ラム</button>
-              <button class="filter-btn px-6 sm:px-7 lg:px-4 py-4 lg:py-2 bg-transparent border-2 lg:border border-neutral-700 rounded-full text-bar-gray text-xl sm:text-2xl lg:text-sm
-                             transition-all duration-300 hover:border-bar-gold hover:text-bar-gold font-bold lg:font-medium" 
-                      data-filter="base" data-value="ジン">ジン</button>
-              <button class="filter-btn px-6 sm:px-7 lg:px-4 py-4 lg:py-2 bg-transparent border-2 lg:border border-neutral-700 rounded-full text-bar-gray text-xl sm:text-2xl lg:text-sm
-                             transition-all duration-300 hover:border-bar-gold hover:text-bar-gold font-bold lg:font-medium" 
-                      data-filter="taste" data-value="スモーキー">スモーキー</button>
-              <button class="filter-btn px-6 sm:px-7 lg:px-4 py-4 lg:py-2 bg-transparent border-2 lg:border border-neutral-700 rounded-full text-bar-gray text-xl sm:text-2xl lg:text-sm
-                             transition-all duration-300 hover:border-bar-gold hover:text-bar-gold font-bold lg:font-medium" 
-                      data-filter="taste" data-value="フルーティー">フルーティー</button>
-              <button class="filter-btn px-6 sm:px-7 lg:px-4 py-4 lg:py-2 bg-transparent border-2 lg:border border-neutral-700 rounded-full text-bar-gray text-xl sm:text-2xl lg:text-sm
-                             transition-all duration-300 hover:border-bar-gold hover:text-bar-gold font-bold lg:font-medium" 
-                      data-filter="taste" data-value="スパイシー">スパイシー</button>
+          <div id="quick-filter-container">
+            <!-- クイックフィルタは動的に生成 -->
           </div>
-        </div>
           <button class="w-full px-7 sm:px-8 lg:px-6 py-6 lg:py-3 bg-bar-gold border-[3px] lg:border-2 border-bar-gold rounded-full text-bar-dark text-3xl sm:text-4xl lg:text-base font-black lg:font-semibold
                          transition-all duration-300 hover:bg-transparent hover:text-bar-gold disabled:opacity-50 disabled:cursor-not-allowed" 
                   id="recommend-btn">おすすめを表示</button>
         </div>
       </div>
       
+      <!-- カテゴリ未選択メッセージ -->
+      <div id="recommend-no-category" class="text-center py-24 lg:py-12">
+        <p class="text-4xl sm:text-5xl lg:text-lg text-bar-gray font-bold lg:font-medium mb-6 lg:mb-4">カテゴリを選択してください</p>
+        <p class="text-2xl sm:text-3xl lg:text-base text-neutral-500">上記のカテゴリボタンから選んでください。</p>
+      </div>
+      
       <div id="recommend-error" class="hidden bg-red-900/10 border border-red-900/30 rounded-xl p-6 lg:p-4 text-red-300 text-2xl lg:text-base mb-6 lg:mb-4"></div>
       <div id="recommend-loading" class="hidden flex flex-col items-center justify-center py-20 lg:py-12 text-gray-500">
         <div class="border-4 border-bar-gray-dark border-t-bar-gold rounded-full w-20 lg:w-10 h-20 lg:h-10 animate-spin-custom mb-6 lg:mb-4"></div>
-        <p class="text-2xl sm:text-3xl lg:text-base font-medium">AIがおすすめを考えています...</p>
+        <p class="text-2xl sm:text-3xl lg:text-base font-medium">おすすめを探しています...</p>
       </div>
       <div id="recommend-results" class="hidden mt-8"></div>
     </div>
@@ -185,15 +191,18 @@
   <script>
     // データを後で取得（初期は空）
     let menuData = { items: [], total: 0, updatedAt: '' };
+    let categories = [];
+    let availableTags = [];
+    let allMenuData = { items: [], total: 0, updatedAt: '' };
     
     let currentTab = 'menu';
     let filters = {
       keyword: '',
       maker: '',
       category: '',
+      type: '',
       recommendPrefs: {
-        base: '',
-        taste: '',
+        selectedTags: [],
         memo: ''
       }
     };
@@ -203,41 +212,41 @@
       initTabs();
       initRecommend();
       
-      // サーバーからデータを取得
+      // サーバーからカテゴリのみを取得
       showLoading();
       
-      console.log('[init] Starting data fetch...');
+      console.log('[init] Starting categories fetch...');
       
       google.script.run
         .withSuccessHandler(function(data) {
-          console.log('[init] Data received:', data);
+          console.log('[init] Categories received:', data);
           
-          if (!data || !data.items) {
-            showError('データの形式が不正です');
+          if (!data || !data.categories) {
+            showError('カテゴリの取得に失敗しました');
             return;
           }
           
-          menuData = data;
-          console.log('[init] Menu items count:', menuData.items.length);
+          categories = data.categories;
+          console.log('[init] Categories count:', categories.length);
           
-          initFilters();
-          renderMenu();
+          renderCategoryButtons();
+          showCategorySelectionMessage();
           hideLoading();
         })
         .withFailureHandler(function(error) {
-          console.error('[init] Data fetch failed:', error);
+          console.error('[init] Categories fetch failed:', error);
           hideLoading();
-          const errorMessage = error && error.message ? error.message : 'データの読み込みに失敗しました';
-          showError('データの読み込みに失敗しました: ' + errorMessage);
+          const errorMessage = error && error.message ? error.message : 'カテゴリの読み込みに失敗しました';
+          showError('カテゴリの読み込みに失敗しました: ' + errorMessage);
         })
-        .getMenuDataForClient();
+        .getCategoriesForClient();
       
       // タイムアウト設定（30秒）
       setTimeout(function() {
-        if (menuData.items.length === 0) {
-          console.warn('[init] Timeout - no data received after 30 seconds');
+        if (categories.length === 0) {
+          console.warn('[init] Timeout - no categories received after 30 seconds');
           hideLoading();
-          showError('データの読み込みがタイムアウトしました。ページをリロードしてください。');
+          showError('カテゴリの読み込みがタイムアウトしました。ページをリロードしてください。');
         }
       }, 30000);
     });
@@ -251,6 +260,141 @@
     
     function hideLoading() {
       // renderMenu()が呼ばれるので特に処理不要
+    }
+    
+    // カテゴリボタンのレンダリング
+    function renderCategoryButtons() {
+      const container = document.getElementById('category-buttons');
+      if (!container) return;
+      
+      container.innerHTML = categories.map(cat => {
+        const isSelected = filters.category === cat;
+        return '<button class="category-btn px-7 sm:px-8 lg:px-4 py-5 lg:py-2 rounded-full text-2xl sm:text-3xl lg:text-sm font-black lg:font-medium transition-all duration-300 ' +
+          (isSelected 
+            ? 'bg-bar-gold border-[3px] lg:border-2 border-bar-gold text-bar-dark' 
+            : 'bg-transparent border-[3px] lg:border-2 border-neutral-700 text-bar-gray hover:border-bar-gold hover:text-bar-gold') +
+          '" data-category="' + escapeHtml(cat) + '">' + escapeHtml(cat) + '</button>';
+      }).join('');
+      
+      // ボタンにイベントリスナーを追加
+      container.querySelectorAll('.category-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          handleCategorySelect(this.getAttribute('data-category'));
+        });
+      });
+    }
+    
+    // カテゴリ選択メッセージの表示
+    function showCategorySelectionMessage() {
+      const grid = document.getElementById('menu-grid');
+      const count = document.getElementById('menu-count');
+      
+      if (count) count.textContent = '';
+      if (grid) {
+        grid.innerHTML = '<div class="col-span-full text-center py-24 lg:py-12"><p class="text-4xl sm:text-5xl lg:text-lg text-bar-gray font-bold lg:font-medium mb-6 lg:mb-4">カテゴリを選択してください</p><p class="text-2xl sm:text-3xl lg:text-base text-neutral-500">上記のカテゴリボタンから選んで、検索してください。</p></div>';
+      }
+    }
+    
+    // カテゴリ選択時の処理
+    function handleCategorySelect(category) {
+      console.log('[handleCategorySelect] Category:', category);
+      
+      filters.category = category;
+      filters.type = '';
+      filters.maker = '';
+      filters.keyword = '';
+      filters.recommendPrefs.selectedTags = [];
+      
+      renderCategoryButtons();
+      
+      // ローディング表示
+      showLoading();
+      
+      // カテゴリのデータとタグを並行取得
+      let menuDataReceived = false;
+      let tagsReceived = false;
+      let hasError = false;
+      
+      // メニューデータを取得
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (hasError) return;
+          
+          console.log('[handleCategorySelect] Data received:', data);
+          
+          if (!data || !data.items) {
+            hasError = true;
+            showError('データの形式が不正です');
+            return;
+          }
+          
+          menuData = data;
+          console.log('[handleCategorySelect] Menu items count:', menuData.items.length);
+          menuDataReceived = true;
+          
+          // 両方取得完了したら初期化
+          if (tagsReceived) {
+            initAfterCategorySelect();
+          }
+        })
+        .withFailureHandler(function(error) {
+          if (hasError) return;
+          hasError = true;
+          console.error('[handleCategorySelect] Data fetch failed:', error);
+          hideLoading();
+          showError('データの読み込みに失敗しました: ' + error.message);
+        })
+        .getMenuDataForClient({ category: category });
+      
+      // タグを取得
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (hasError) return;
+          
+          console.log('[handleCategorySelect] Tags received:', data);
+          
+          if (!data || !Array.isArray(data.tags)) {
+            hasError = true;
+            showError('タグデータの形式が不正です');
+            return;
+          }
+          
+          availableTags = data.tags;
+          console.log('[handleCategorySelect] Available tags count:', availableTags.length);
+          tagsReceived = true;
+          
+          // 両方取得完了したら初期化
+          if (menuDataReceived) {
+            initAfterCategorySelect();
+          }
+        })
+        .withFailureHandler(function(error) {
+          if (hasError) return;
+          hasError = true;
+          console.error('[handleCategorySelect] Tags fetch failed:', error);
+          hideLoading();
+          showError('タグの読み込みに失敗しました: ' + error.message);
+        })
+        .getTagsForCategory(category);
+    }
+    
+    // カテゴリ選択後の初期化処理
+    function initAfterCategorySelect() {
+      // フィルタとボタンを初期化
+      initSearchFilters();
+      
+      // おすすめフォームを初期化
+      initRecommendFilters();
+      
+      // メニュータブ: 検索フィルタを表示
+      document.getElementById('search-filters').classList.remove('hidden');
+      
+      // おすすめタブ: フォームを表示、メッセージを非表示
+      document.getElementById('recommend-form').classList.remove('hidden');
+      document.getElementById('recommend-no-category').classList.add('hidden');
+      
+      // メニューをレンダリング
+      renderMenu();
     }
     
     // タブ切り替え
@@ -288,17 +432,22 @@
       document.getElementById(tabName + '-tab').classList.remove('hidden');
     }
     
-    // フィルタ初期化
-    function initFilters() {
-      // キーワード検索
-      const keywordInput = document.getElementById('keyword-input');
-      keywordInput.addEventListener('input', function() {
-        filters.keyword = this.value;
-        renderMenu();
+    // 検索フィルタ初期化
+    function initSearchFilters() {
+      // タイプ選択
+      const typeSelect = document.getElementById('type-select');
+      typeSelect.innerHTML = '<option value="">すべて</option>';
+      const types = [...new Set(menuData.items.map(item => item.type).filter(Boolean))].sort();
+      types.forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type;
+        typeSelect.appendChild(option);
       });
       
       // メーカー選択
       const makerSelect = document.getElementById('maker-select');
+      makerSelect.innerHTML = '<option value="">すべて</option>';
       const makers = [...new Set(menuData.items.map(item => item.maker).filter(Boolean))].sort();
       makers.forEach(maker => {
         const option = document.createElement('option');
@@ -306,61 +455,102 @@
         option.textContent = maker;
         makerSelect.appendChild(option);
       });
-      makerSelect.addEventListener('change', function() {
-        filters.maker = this.value;
-        renderMenu();
-      });
       
-      // カテゴリ選択
-      const categorySelect = document.getElementById('category-select');
-      const categories = [...new Set(menuData.items.map(item => item.category).filter(Boolean))].sort();
-      categories.forEach(category => {
-        const option = document.createElement('option');
-        option.value = category;
-        option.textContent = category;
-        categorySelect.appendChild(option);
-      });
-      categorySelect.addEventListener('change', function() {
-        filters.category = this.value;
+      // キーワード入力をクリア
+      const keywordInput = document.getElementById('keyword-input');
+      keywordInput.value = '';
+      
+      // 検索ボタン
+      const searchBtn = document.getElementById('search-btn');
+      searchBtn.onclick = function() {
+        filters.type = typeSelect.value;
+        filters.maker = makerSelect.value;
+        filters.keyword = keywordInput.value;
         renderMenu();
-      });
+      };
+      
+      // リセットボタン
+      const resetBtn = document.getElementById('reset-btn');
+      resetBtn.onclick = function() {
+        filters.category = '';
+        filters.type = '';
+        filters.maker = '';
+        filters.keyword = '';
+        
+        // メニュータブ: 検索フィルタを非表示
+        document.getElementById('search-filters').classList.add('hidden');
+        
+        // おすすめタブ: フォームを非表示、メッセージを表示
+        document.getElementById('recommend-form').classList.add('hidden');
+        document.getElementById('recommend-no-category').classList.remove('hidden');
+        
+        // カテゴリボタンをリセット
+        renderCategoryButtons();
+        
+        // メッセージを表示
+        showCategorySelectionMessage();
+      };
     }
     
-    // レコメンド初期化
+    // レコメンド初期化（初回のみ）
     function initRecommend() {
-      // フィルタボタン
-      const filterBtns = document.querySelectorAll('.filter-btn');
-      filterBtns.forEach(btn => {
-        btn.addEventListener('click', function() {
-          const filterType = this.getAttribute('data-filter');
-          const value = this.getAttribute('data-value');
-          
-          if (this.classList.contains('bg-bar-gold')) {
-            // 非アクティブ化
-            this.classList.remove('bg-bar-gold', 'text-bar-dark');
-            this.classList.add('bg-transparent', 'text-bar-gray');
-            filters.recommendPrefs[filterType] = '';
-          } else {
-            // 同じフィルタタイプの他のボタンを非アクティブ化
-            filterBtns.forEach(b => {
-              if (b.getAttribute('data-filter') === filterType && b !== this) {
-                b.classList.remove('bg-bar-gold', 'text-bar-dark');
-                b.classList.add('bg-transparent', 'text-bar-gray');
-              }
-            });
-            // アクティブ化
-            this.classList.add('bg-bar-gold', 'text-bar-dark');
-            this.classList.remove('bg-transparent', 'text-bar-gray');
-            filters.recommendPrefs[filterType] = value;
-          }
-        });
-      });
-      
       // おすすめボタン
       const recommendBtn = document.getElementById('recommend-btn');
       recommendBtn.addEventListener('click', function() {
         handleRecommend();
       });
+    }
+    
+    // レコメンドフィルタ初期化（カテゴリ選択ごと）
+    function initRecommendFilters() {
+      const container = document.getElementById('quick-filter-container');
+      if (!container) return;
+      
+      // タグがない場合は非表示
+      if (availableTags.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+      
+      // クイックフィルタを生成
+      container.innerHTML = '<div>' +
+        '<label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">クイックフィルタ（味わい）' +
+        '<span class="ml-2 text-lg lg:text-xs text-neutral-500">複数選択可</span></label>' +
+        '<div id="tag-buttons" class="flex flex-wrap gap-4 lg:gap-2 mt-4 lg:mt-2">' +
+        availableTags.map(tag => {
+          const isSelected = filters.recommendPrefs.selectedTags.includes(tag);
+          return '<button class="tag-filter-btn px-6 sm:px-7 lg:px-4 py-4 lg:py-2 rounded-full text-xl sm:text-2xl lg:text-sm font-bold lg:font-medium transition-all duration-300 ' +
+            (isSelected 
+              ? 'bg-bar-gold border-[3px] lg:border-2 border-bar-gold text-bar-dark' 
+              : 'bg-transparent border-2 lg:border border-neutral-700 text-bar-gray hover:border-bar-gold hover:text-bar-gold') +
+            '" data-tag="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '</button>';
+        }).join('') +
+        '</div>' +
+      '</div>';
+      
+      // イベントリスナーを追加
+      container.querySelectorAll('.tag-filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const tag = this.getAttribute('data-tag');
+          handleTagToggle(tag);
+        });
+      });
+    }
+    
+    // タグの選択/解除
+    function handleTagToggle(tag) {
+      const index = filters.recommendPrefs.selectedTags.indexOf(tag);
+      
+      if (index !== -1) {
+        // 解除
+        filters.recommendPrefs.selectedTags.splice(index, 1);
+      } else {
+        // 選択
+        filters.recommendPrefs.selectedTags.push(tag);
+      }
+      
+      // 再レンダリング
+      initRecommendFilters();
     }
     
     // メニュー表示
@@ -371,6 +561,14 @@
       // フィルタリング
       let items = menuData.items;
       
+      if (filters.type) {
+        items = items.filter(item => item.type === filters.type);
+      }
+      
+      if (filters.maker) {
+        items = items.filter(item => item.maker === filters.maker);
+      }
+      
       if (filters.keyword) {
         const keyword = filters.keyword.toLowerCase();
         items = items.filter(item => {
@@ -379,14 +577,6 @@
                  (item.description && item.description.toLowerCase().includes(keyword)) ||
                  (item.tags && item.tags.some(tag => tag.toLowerCase().includes(keyword)));
         });
-      }
-      
-      if (filters.maker) {
-        items = items.filter(item => item.maker === filters.maker);
-      }
-      
-      if (filters.category) {
-        items = items.filter(item => item.category === filters.category);
       }
       
       // カウント表示
@@ -409,13 +599,13 @@
         if (item.price10ml) prices.push('10ml ¥' + item.price10ml.toLocaleString('ja-JP'));
         const priceText = prices.length > 0 ? prices.join(' / ') : '';
         
-        const categoryDisplay = item.type ? escapeHtml(item.category) + ' / ' + escapeHtml(item.type) : escapeHtml(item.category);
+        const typeDisplay = item.type ? escapeHtml(item.type) : '';
         
         return '<article class="flex flex-col bg-black/40 border border-neutral-800 rounded-3xl overflow-hidden backdrop-blur-sm transition-all duration-300 hover:border-bar-gold/50">' +
           '<div class="p-7 sm:p-8 lg:p-5">' +
             '<div class="flex flex-col gap-6 lg:gap-4">' +
               '<div class="flex flex-col gap-4 lg:gap-2.5">' +
-                '<span class="text-xl sm:text-2xl lg:text-sm text-bar-gold uppercase tracking-wider font-bold lg:font-semibold">' + categoryDisplay + '</span>' +
+                (typeDisplay ? '<span class="text-xl sm:text-2xl lg:text-sm text-bar-gold uppercase tracking-wider font-bold lg:font-semibold">' + typeDisplay + '</span>' : '') +
                 '<h3 class="text-4xl sm:text-5xl lg:text-xl text-gray-100 font-serif font-black lg:font-semibold leading-tight">' + escapeHtml(item.name) + '</h3>' +
                 '<p class="text-2xl sm:text-3xl lg:text-base text-neutral-400 font-semibold lg:font-medium">' + escapeHtml(item.maker) + '</p>' +
                 '<p class="text-xl sm:text-2xl lg:text-base text-neutral-300 leading-relaxed line-clamp-3">' + escapeHtml(item.description || '') + '</p>' +
@@ -433,23 +623,24 @@
     
     // レコメンド処理
     function handleRecommend() {
-      const text = document.getElementById('recommend-text').value.trim();
-      
-      if (!text && !filters.recommendPrefs.base && !filters.recommendPrefs.taste) {
-        showError('気分や好みを入力してください');
+      // カテゴリチェック
+      if (!filters.category) {
+        showError('カテゴリを選択してください');
         return;
       }
       
-      // 候補を最大20件に制限
-      const candidates = menuData.items.slice(0, 20).map(item => ({
+      const text = document.getElementById('recommend-text').value.trim();
+      
+      // フリーワードとクイックフィルタの両方が未入力の場合はエラー
+      if (!text && filters.recommendPrefs.selectedTags.length === 0) {
+        showError('フリーワードまたはクイックフィルタから1つ以上入力/選択してください');
+        return;
+      }
+      
+      // 全件を候補として送信（情報は最小限に）
+      const candidates = menuData.items.map(item => ({
         id: item.id,
-        name: item.name,
-        base: item.category,
-        taste: item.tags ? item.tags.join(', ') : '',
-        price: item.price30ml,
-        abv: item.alcoholVolume,
-        tags: item.tags,
-        description: item.description
+        name: item.name
       }));
       
       if (candidates.length === 0) {
@@ -459,9 +650,9 @@
       
       const request = {
         prefs: {
-          base: filters.recommendPrefs.base,
-          taste: filters.recommendPrefs.taste,
-          memo: text
+          selectedTags: filters.recommendPrefs.selectedTags,
+          memo: text,
+          category: filters.category
         },
         candidates: candidates
       };
@@ -483,35 +674,65 @@
       document.getElementById('recommend-loading').classList.add('hidden');
       document.getElementById('recommend-btn').disabled = false;
       
+      console.log('[handleRecommendSuccess] Response:', response);
+      
       if (response.error) {
-        showError(response.message || 'エラーが発生しました');
+        // エラーコードに応じた表示
+        if (response.code === 'RATE_LIMIT') {
+          showError(response.message || '現在、おすすめ機能は利用できません。API利用制限に達しています。しばらく時間をおいてから再度お試しください。');
+        } else {
+          showError(response.message || 'エラーが発生しました');
+        }
         return;
       }
       
       const data = response.data;
       const resultsDiv = document.getElementById('recommend-results');
       
-      if (!data.items || data.items.length === 0) {
-        showError('おすすめが見つかりませんでした');
+      console.log('[handleRecommendSuccess] Data:', data);
+      console.log('[handleRecommendSuccess] Items count:', data.items ? data.items.length : 0);
+      
+      if (!data || !data.items || data.items.length === 0) {
+        console.error('[handleRecommendSuccess] No items in response');
+        showError('おすすめが見つかりませんでした。');
+        return;
+      }
+      
+      // メニューに存在するアイテムのみをフィルタリング
+      const validItems = data.items.filter(item => {
+        const menuItem = menuData.items.find(m => m.id === item.id);
+        if (!menuItem) {
+          console.warn('[handleRecommendSuccess] Item not found in menu:', item.id, 'Available IDs:', menuData.items.map(m => m.id));
+        }
+        return menuItem !== undefined;
+      });
+      
+      console.log('[handleRecommendSuccess] Valid items count:', validItems.length);
+      
+      if (validItems.length === 0) {
+        console.error('[handleRecommendSuccess] No valid items found. AI returned items:', data.items.map(i => i.id));
+        console.error('[handleRecommendSuccess] Available menu IDs:', menuData.items.map(m => m.id).slice(0, 10));
+        showError('おすすめが見つかりませんでした。AIが返したIDがメニューに存在しません。');
         return;
       }
       
       resultsDiv.innerHTML = '<h2 class="text-5xl sm:text-6xl lg:text-3xl text-bar-gold font-serif font-black lg:font-semibold mb-10 lg:mb-6">おすすめの一杯</h2>' +
         (data.note ? '<p class="text-2xl sm:text-3xl lg:text-base text-bar-gray mb-10 lg:mb-6">' + escapeHtml(data.note) + '</p>' : '') +
-        data.items.map(item => {
+        validItems.map(item => {
           const menuItem = menuData.items.find(m => m.id === item.id);
-          const name = menuItem ? menuItem.name : item.id;
-          const maker = menuItem ? menuItem.maker : '';
           
-          return '<div class="relative bg-gradient-to-br from-neutral-900/80 to-black/90 border-2 lg:border border-bar-gray-dark rounded-3xl lg:rounded-2xl p-8 sm:p-10 lg:p-6 mb-8 lg:mb-6 overflow-hidden transition-all duration-300 hover:border-bar-gold hover:shadow-xl hover:shadow-bar-gold/20 before:content-[\'\'] before:absolute before:top-0 before:left-0 before:right-0 before:h-1.5 lg:before:h-1 before:bg-gradient-to-r before:from-bar-gold before:to-bar-gold-light">' +
-            '<div class="flex justify-between items-start mb-6 lg:mb-4 pb-6 lg:pb-4 border-b-2 lg:border-b border-bar-gold/10">' +
-              '<div>' +
-                '<h3 class="text-4xl sm:text-5xl lg:text-2xl text-gray-100 font-black lg:font-semibold tracking-wide mb-4 lg:mb-2">' + escapeHtml(name) + '</h3>' +
-                '<p class="text-2xl sm:text-3xl lg:text-base text-bar-gold font-bold lg:font-medium">' + escapeHtml(maker) + '</p>' +
+          return '<div class="bg-black/40 border border-neutral-800 rounded-3xl overflow-hidden backdrop-blur-sm transition-all duration-300 hover:border-bar-gold/50 mb-8 lg:mb-6">' +
+            '<div class="p-8 sm:p-10 lg:p-6">' +
+              '<div class="flex flex-col gap-6 lg:gap-4">' +
+                '<div>' +
+                  '<h3 class="text-4xl sm:text-5xl lg:text-2xl text-gray-100 font-black lg:font-semibold tracking-wide mb-4 lg:mb-2">' + escapeHtml(menuItem.name) + '</h3>' +
+                  '<p class="text-2xl sm:text-3xl lg:text-base text-bar-gold font-bold lg:font-medium mb-6 lg:mb-4">' + escapeHtml(menuItem.maker) + '</p>' +
+                  '<p class="text-2xl sm:text-3xl lg:text-base text-bar-gray leading-relaxed">' + escapeHtml(item.reason) + '</p>' +
+                  (item.serve ? '<p class="text-xl lg:text-sm text-neutral-400 mt-4 lg:mt-3">提供方法: ' + escapeHtml(item.serve) + '</p>' : '') +
+                '</div>' +
+                '<div><button class="w-full px-6 py-5 lg:px-4 lg:py-2.5 bg-transparent border-[3px] lg:border-2 border-bar-gold rounded-full text-bar-gold text-2xl sm:text-3xl lg:text-sm font-black lg:font-medium transition-all duration-300 hover:bg-bar-gold hover:text-bar-dark" onclick="showDetailModal(\'' + menuItem.id + '\'); event.stopPropagation();">詳しく見る</button></div>' +
               '</div>' +
             '</div>' +
-            '<p class="text-2xl sm:text-3xl lg:text-base text-bar-gray leading-relaxed mb-6 lg:mb-4">' + escapeHtml(item.reason) + '</p>' +
-            (item.serve ? '<p class="text-xl lg:text-sm text-neutral-400">提供方法: ' + escapeHtml(item.serve) + '</p>' : '') +
           '</div>';
         }).join('');
       
@@ -552,9 +773,9 @@
       if (!item) return;
       
       // ヘッダー
-      const categoryDisplay = item.type ? escapeHtml(item.category) + ' / ' + escapeHtml(item.type) : escapeHtml(item.category);
+      const typeDisplay = item.type ? escapeHtml(item.type) : '';
       
-      const headerHtml = '<span class="text-xl sm:text-2xl lg:text-xs text-bar-gold uppercase tracking-widest font-black lg:font-semibold">' + categoryDisplay + '</span>' +
+      const headerHtml = (typeDisplay ? '<span class="text-xl sm:text-2xl lg:text-xs text-bar-gold uppercase tracking-widest font-black lg:font-semibold">' + typeDisplay + '</span>' : '') +
         '<h2 class="text-4xl sm:text-5xl lg:text-2xl text-gray-100 font-serif font-black lg:font-semibold mt-5 lg:mt-2">' + escapeHtml(item.name) + '</h2>' +
         '<p class="text-2xl sm:text-3xl lg:text-sm text-neutral-400 font-bold lg:font-medium mt-4 lg:mt-2">' + escapeHtml(item.maker) + '</p>' +
         (item.tags && item.tags.length > 0 ? '<div class="flex flex-wrap gap-3 lg:gap-2 mt-6 lg:mt-4">' + item.tags.map(tag => '<span class="px-5 py-3 lg:px-3 lg:py-1 border-2 lg:border border-neutral-700 rounded-full text-neutral-300 text-xl lg:text-xs">#' + escapeHtml(tag) + '</span>').join('') + '</div>' : '');
@@ -592,7 +813,6 @@
       
       // 詳細情報
       const details = [];
-      if (item.category) details.push({ label: 'カテゴリ', value: item.category });
       if (item.type) details.push({ label: 'タイプ', value: item.type });
       if (item.alcoholVolume) details.push({ label: 'アルコール度数', value: item.alcoholVolume + '%' });
       if (item.country) details.push({ label: '生産国', value: item.country });
