@@ -3,18 +3,13 @@
  * 
  * 機能:
  * - doGet(): Webアプリで全データをJSON配信
- * - recommend(): Gemini 1.5 FlashでAIおすすめ（再ランク＋理由生成）
- * - 承認→反映: 時間トリガー（5分間隔）＋即時反映ボタン
+ * - recommend(): Gemini 2.0 Flash ExpでAIおすすめ（再ランク＋理由生成）
+ * - メニュー表示制御: ボタンで即時反映
+ * - AI補完: Gemini APIで商品情報の自動補完
  * - AI_Logs: レコメンド履歴記録
  */
 
 // ===== 列定義 =====
-const EXISTING_HEADERS = [
-  '国', '製造会社', '販売会社', '蒸溜所', 'タイプ', '樽番号', '商品名', '備考',
-  '熟成地', '樽種', '熟成期間', '現行', 'ピート感', '度数', '本数',
-  '30ml', '15ml', '10ml'
-];
-
 const NEW_HEADERS = [
   '公開カテゴリ', '公開国', '公開メーカー', '公開蒸溜所', '公開タイプ', '公開商品名', 
   '公開説明文', '公開樽種', '公開熟成期間', '公開度数', '公開タグ',
@@ -69,38 +64,27 @@ function doGet(e) {
  */
 function getCategoriesForClient() {
   try {
-    Logger.log('[getCategoriesForClient] start');
-    
     const cache = CacheService.getScriptCache();
     const cacheKey = 'categories';
     
     // キャッシュから取得を試みる
     const cached = cache.get(cacheKey);
     if (cached) {
-      Logger.log('[getCategoriesForClient] cache hit');
-      const data = JSON.parse(cached);
-      Logger.log('[getCategoriesForClient] returning ' + data.categories.length + ' categories from cache');
-      return data;
+      return JSON.parse(cached);
     }
     
     // キャッシュがない場合はスプレッドシートから取得
-    Logger.log('[getCategoriesForClient] cache miss, fetching from sheet');
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('メニュー');
     if (!sheet) {
-      Logger.log('[getCategoriesForClient] sheet not found');
       return { categories: [], updatedAt: new Date().toISOString() };
     }
     
-    Logger.log('[getCategoriesForClient] calling getCategories');
     const data = getCategories(sheet);
-    Logger.log('[getCategoriesForClient] got ' + data.categories.length + ' categories');
     
     // 10分間キャッシュ（600秒）
     try {
       cache.put(cacheKey, JSON.stringify(data), 600);
-      Logger.log('[getCategoriesForClient] cached for 600 seconds');
     } catch (cacheError) {
-      Logger.log('[getCategoriesForClient] cache put failed: ' + cacheError.message);
       // キャッシュ失敗してもデータは返す
     }
     
@@ -119,8 +103,6 @@ function getCategoriesForClient() {
  */
 function getMenuDataForClient(options) {
   try {
-    Logger.log('[getMenuDataForClient] start');
-    
     options = options || {};
     const category = options.category || null;
     
@@ -130,30 +112,21 @@ function getMenuDataForClient(options) {
     // キャッシュから取得を試みる
     const cached = cache.get(cacheKey);
     if (cached) {
-      Logger.log('[getMenuDataForClient] cache hit for key: ' + cacheKey);
-      const data = JSON.parse(cached);
-      Logger.log('[getMenuDataForClient] returning ' + data.items.length + ' items from cache');
-      return data;
+      return JSON.parse(cached);
     }
     
     // キャッシュがない場合はスプレッドシートから取得
-    Logger.log('[getMenuDataForClient] cache miss, fetching from sheet');
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('メニュー');
     if (!sheet) {
-      Logger.log('[getMenuDataForClient] sheet not found');
       return { items: [], total: 0, updatedAt: new Date().toISOString() };
     }
     
-    Logger.log('[getMenuDataForClient] calling getMenuData with category: ' + category);
     const data = getMenuData(sheet, category);
-    Logger.log('[getMenuDataForClient] got ' + data.items.length + ' items');
     
     // 10分間キャッシュ（600秒）
     try {
       cache.put(cacheKey, JSON.stringify(data), 600);
-      Logger.log('[getMenuDataForClient] cached for 600 seconds with key: ' + cacheKey);
     } catch (cacheError) {
-      Logger.log('[getMenuDataForClient] cache put failed: ' + cacheError.message);
       // キャッシュ失敗してもデータは返す
     }
     
@@ -161,7 +134,7 @@ function getMenuDataForClient(options) {
   } catch (error) {
     Logger.log('[getMenuDataForClient] error: ' + error.message);
     Logger.log('[getMenuDataForClient] stack: ' + error.stack);
-    throw error; // エラーをクライアントに伝える
+    throw error;
   }
 }
 
@@ -186,13 +159,10 @@ function clearMenuCache() {
       const tagsKey = 'tags_' + category;
       cache.remove(menuDataKey);
       cache.remove(tagsKey);
-      Logger.log('[clearMenuCache] cleared cache for category: ' + category);
     });
   } catch (error) {
-    Logger.log('[clearMenuCache] error clearing category caches: ' + error.message);
+    // エラーは無視
   }
-  
-  Logger.log('[clearMenuCache] menu, tags and category cache cleared');
 }
 
 /**
@@ -218,13 +188,10 @@ function serveMenuJson() {
  */
 function getCategories(sheet) {
   try {
-    Logger.log('[getCategories] start');
-    
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     const lastRow = sheet.getLastRow();
     
     if (lastRow < 2) {
-      Logger.log('[getCategories] no data rows');
       return { categories: [], updatedAt: new Date().toISOString() };
     }
     
@@ -246,8 +213,6 @@ function getCategories(sheet) {
     
     const categories = Array.from(categorySet).sort();
     
-    Logger.log('[getCategories] found ' + categories.length + ' categories: ' + categories.join(', '));
-    
     return {
       categories: categories,
       updatedAt: new Date().toISOString()
@@ -266,25 +231,18 @@ function getCategories(sheet) {
  */
 function getTagsForCategory(category) {
   try {
-    Logger.log('[getTagsForCategory] start with category: ' + category);
-    
     const cache = CacheService.getScriptCache();
     const cacheKey = 'tags_' + category;
     
     // キャッシュから取得を試みる
     const cached = cache.get(cacheKey);
     if (cached) {
-      Logger.log('[getTagsForCategory] cache hit for key: ' + cacheKey);
-      const data = JSON.parse(cached);
-      Logger.log('[getTagsForCategory] returning ' + data.tags.length + ' tags from cache');
-      return data;
+      return JSON.parse(cached);
     }
     
     // キャッシュがない場合はスプレッドシートから取得
-    Logger.log('[getTagsForCategory] cache miss, fetching from sheet');
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('メニュー');
     if (!sheet) {
-      Logger.log('[getTagsForCategory] sheet not found');
       return { tags: [], updatedAt: new Date().toISOString() };
     }
     
@@ -292,7 +250,6 @@ function getTagsForCategory(category) {
     const lastRow = sheet.getLastRow();
     
     if (lastRow < 2) {
-      Logger.log('[getTagsForCategory] no data rows');
       return { tags: [], updatedAt: new Date().toISOString() };
     }
     
@@ -326,8 +283,6 @@ function getTagsForCategory(category) {
     
     const tags = Array.from(tagSet).sort();
     
-    Logger.log('[getTagsForCategory] found ' + tags.length + ' tags: ' + tags.join(', '));
-    
     const result = {
       tags: tags,
       updatedAt: new Date().toISOString()
@@ -336,9 +291,7 @@ function getTagsForCategory(category) {
     // 10分間キャッシュ（600秒）
     try {
       cache.put(cacheKey, JSON.stringify(result), 600);
-      Logger.log('[getTagsForCategory] cached for 600 seconds with key: ' + cacheKey);
     } catch (cacheError) {
-      Logger.log('[getTagsForCategory] cache put failed: ' + cacheError.message);
       // キャッシュ失敗してもデータは返す
     }
     
@@ -357,21 +310,14 @@ function getTagsForCategory(category) {
  */
 function getMenuData(sheet, filterCategory) {
   try {
-    Logger.log('[getMenuData] start with filterCategory: ' + filterCategory);
-    
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    Logger.log('[getMenuData] headers count: ' + headers.length);
-    
     const lastRow = sheet.getLastRow();
-    Logger.log('[getMenuData] last row: ' + lastRow);
     
     if (lastRow < 2) {
-      Logger.log('[getMenuData] no data rows');
       return { items: [], total: 0, updatedAt: new Date().toISOString() };
     }
     
     const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-    Logger.log('[getMenuData] data rows fetched: ' + data.length);
     
     const colIndex = (name) => headers.indexOf(name);
   
@@ -475,16 +421,11 @@ function getMenuData(sheet, filterCategory) {
     });
   });
   
-  Logger.log('[getMenuData] filtered items: ' + items.length);
-  
-  const result = {
+  return {
     items: items,
     total: items.length,
     updatedAt: new Date().toISOString()
   };
-  
-  Logger.log('[getMenuData] complete, returning ' + result.total + ' items');
-  return result;
   
   } catch (error) {
     Logger.log('[getMenuData] error: ' + error.message);
@@ -593,9 +534,36 @@ function recommend(request) {
 }
 
 /**
- * Gemini API呼び出し（プライベート関数）
+ * Gemini API呼び出し（プライベート関数・リトライ機能付き）
  */
 function callGeminiAPI_(apiKey, request) {
+  const maxRetries = 2;
+  const baseDelay = 1000; // 1秒
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return callGeminiAPIInternal_(apiKey, request);
+    } catch (error) {
+      // 503エラー（Service Unavailable）の場合はリトライ
+      if (error.message.indexOf('503') !== -1 && attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt); // 指数バックオフ: 1秒, 2秒
+        Logger.log('[callGeminiAPI] Retry ' + (attempt + 1) + '/' + maxRetries + ' after ' + delay + 'ms due to 503 error');
+        Utilities.sleep(delay);
+        continue;
+      }
+      
+      // その他のエラー、または最大リトライ回数到達時は例外をスロー
+      throw error;
+    }
+  }
+  
+  throw new Error('おすすめ機能でエラーが発生しました（最大リトライ回数に到達）');
+}
+
+/**
+ * Gemini API呼び出し（内部実装）
+ */
+function callGeminiAPIInternal_(apiKey, request) {
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' + apiKey;
   
   const prompt = buildRecommendPrompt_(request);
@@ -626,8 +594,6 @@ function callGeminiAPI_(apiKey, request) {
   const responseText = response.getContentText();
   
   if (statusCode !== 200) {
-    Logger.log('[callGeminiAPI] error: ' + statusCode + ' ' + responseText);
-    
     // エラーレスポンスを解析
     try {
       const errorData = JSON.parse(responseText);
@@ -637,6 +603,11 @@ function callGeminiAPI_(apiKey, request) {
         throw new Error('RATE_LIMIT_EXCEEDED');
       }
       
+      // 503エラー（Service Unavailable）
+      if (statusCode === 503) {
+        throw new Error('Gemini APIが一時的に利用できません（503）。しばらく待ってから再試行してください。');
+      }
+      
       // その他のエラー
       const errorMessage = errorData.error && errorData.error.message 
         ? errorData.error.message 
@@ -644,14 +615,18 @@ function callGeminiAPI_(apiKey, request) {
       throw new Error(errorMessage);
     } catch (parseError) {
       // JSON解析失敗時
-      if (parseError.message === 'RATE_LIMIT_EXCEEDED') {
+      if (parseError.message === 'RATE_LIMIT_EXCEEDED' || parseError.message.indexOf('503') !== -1) {
         throw parseError;
       }
+      
+      // 503エラーの場合
+      if (statusCode === 503) {
+        throw new Error('Gemini APIが一時的に利用できません（503）。しばらく待ってから再試行してください。');
+      }
+      
       throw new Error('Gemini API error: ' + statusCode);
     }
   }
-  
-  Logger.log('[callGeminiAPI] response: ' + responseText);
   
   const result = JSON.parse(responseText);
   
@@ -688,7 +663,6 @@ function callGeminiAPI_(apiKey, request) {
   try {
     jsonData = extractJSON_(text);
   } catch (error) {
-    Logger.log('[callGeminiAPI] JSON parse error: ' + error.message);
     // フォールバック: noteに生テキストを返す
     return {
       items: [],
@@ -884,7 +858,6 @@ function setupMenuSheet() {
   protectColumns(sheet, headers, PROTECTED_HEADERS);
   
   SpreadsheetApp.flush();
-  Logger.log('セットアップ完了');
   SpreadsheetApp.getUi().alert('セットアップ完了', 'メニューシートの初期設定が完了しました。', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
@@ -909,22 +882,17 @@ function protectColumns(sheet, headers, names) {
 // ===== カスタムメニュー =====
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
-  ui.createMenu('Bar Ease Hongo')
+  ui.createMenu('メニューアプリ')
     .addItem('AI補完を実行 (最大10件)', 'requestAiCompletion')
     .addSeparator()
     .addItem('メニューに表示', 'showInMenu')
     .addItem('メニューから非表示', 'hideFromMenu')
     .addSeparator()
-    .addItem('キャッシュをクリア', 'clearMenuCache')
-    .addSeparator()
-    .addItem('データ確認（デバッグ）', 'debugMenuData')
-    .addItem('Gemini API接続テスト', 'testGeminiAPI')
     .addItem('初期設定', 'setupMenuSheet')
-    .addItem('設定を確認', 'checkSettings')
     .addToUi();
 }
 
-// ===== onEdit トリガー（優先公開列編集時に公開状態をクリア） =====
+// ===== onEdit トリガー（セル編集時の処理） =====
 function handleSheetEdit(e) {
   if (!e || !e.range) return;
   
@@ -932,6 +900,7 @@ function handleSheetEdit(e) {
   const row = e.range.getRow();
   const col = e.range.getColumn();
   
+  // ヘッダー行（1行目）の編集は無視
   if (row <= 1) return;
   
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -941,11 +910,13 @@ function handleSheetEdit(e) {
   const colIdEnd = colIndex('公開度数');
   const colPublishStatus = colIndex('メニュー表示状態');
   
-  // 優先公開列が編集されたら「メニュー表示状態」をクリア＋キャッシュクリア
+  // 優先公開列が編集されたら「メニュー表示状態」をクリア
   if (col >= colIdStart && col <= colIdEnd && colPublishStatus > 0) {
     sheet.getRange(row, colPublishStatus).setValue('');
-    clearMenuCache();
   }
+  
+  // すべてのセル編集でキャッシュをクリア（即時反映のため）
+  clearMenuCache();
 }
 
 // ===== ボタン: AI補完を実行 =====
@@ -1160,167 +1131,6 @@ function publishInfo(newPublishStatus) {
   SpreadsheetApp.getUi().alert(message);
 }
 
-// ===== ボタン: 設定確認 =====
-function checkSettings() {
-  const props = PropertiesService.getScriptProperties();
-  const geminiApiKey = props.getProperty(PROP_GEMINI_API_KEY);
-  
-  // キャッシュの状態確認
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get('menuData');
-  const cacheStatus = cached ? '有効（10分間）' : 'なし';
-  
-  // AI_Logsから今日の使用統計を取得
-  const stats = getAiUsageStats();
-  
-  const message = '設定状況:\n\n' +
-    '【API設定】\n' +
-    '• GEMINI_API_KEY: ' + (geminiApiKey ? '設定済み' : '未設定') + '\n' +
-    '• 使用モデル: gemini-2.0-flash-exp\n\n' +
-    '【キャッシュ】\n' +
-    '• メニューデータ: ' + cacheStatus + '\n\n' +
-    '【AI使用状況（本日）】\n' +
-    '• AIおすすめリクエスト: ' + stats.todayCount + '回\n' +
-    '• 平均レイテンシ: ' + stats.avgLatency + 'ms\n\n' +
-    '【無料枠の制限】\n' +
-    '• 1日: 1,500 requests\n' +
-    '• 1分: 15 requests\n' +
-    '• トークン: 1M tokens/分\n\n' +
-    '現在の使用量は十分に余裕があります。\n\n' +
-    '未設定の項目がある場合は、Apps Script エディタで\n' +
-    '「プロジェクトの設定」→「スクリプト プロパティ」から設定してください。\n\n' +
-    '設定例:\n' +
-    '• GEMINI_API_KEY: your-gemini-api-key';
-  
-  SpreadsheetApp.getUi().alert(message);
-}
-
-/**
- * AI使用統計を取得
- */
-function getAiUsageStats() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const logSheet = ss.getSheetByName('AI_Logs');
-  
-  if (!logSheet) {
-    return { todayCount: 0, avgLatency: 0 };
-  }
-  
-  const lastRow = logSheet.getLastRow();
-  if (lastRow <= 1) {
-    return { todayCount: 0, avgLatency: 0 };
-  }
-  
-  const data = logSheet.getRange(2, 1, lastRow - 1, 8).getValues();
-  
-  // 今日の日付
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  let todayCount = 0;
-  let totalLatency = 0;
-  
-  data.forEach(row => {
-    const timestamp = new Date(row[0]); // タイムスタンプ列
-    const latency = row[7]; // レイテンシ列
-    
-    if (timestamp >= today) {
-      todayCount++;
-      if (latency && !isNaN(latency)) {
-        totalLatency += latency;
-      }
-    }
-  });
-  
-  const avgLatency = todayCount > 0 ? Math.round(totalLatency / todayCount) : 0;
-  
-  return { todayCount, avgLatency };
-}
-
-// ===== デバッグ: Gemini API接続テスト =====
-function testGeminiAPI() {
-  const apiKey = PropertiesService.getScriptProperties().getProperty(PROP_GEMINI_API_KEY);
-  if (!apiKey) {
-    SpreadsheetApp.getUi().alert('エラー', 'GEMINI_API_KEYが設定されていません', SpreadsheetApp.getUi().ButtonSet.OK);
-    return;
-  }
-  
-  let results = 'Gemini API接続テスト結果:\n\n';
-  
-  // 1. モデルリスト取得
-  try {
-    const listUrl = 'https://generativelanguage.googleapis.com/v1beta/models?key=' + apiKey;
-    const listResponse = UrlFetchApp.fetch(listUrl, { muteHttpExceptions: true });
-    const listStatusCode = listResponse.getResponseCode();
-    
-    if (listStatusCode === 200) {
-      results += '[成功] API接続: OK\n\n';
-      const listData = JSON.parse(listResponse.getContentText());
-      
-      if (listData.models && listData.models.length > 0) {
-        results += '利用可能なモデル:\n';
-        const generateModels = listData.models
-          .filter(m => m.name && m.name.indexOf('gemini') !== -1 && m.supportedGenerationMethods && m.supportedGenerationMethods.indexOf('generateContent') !== -1)
-          .slice(0, 10); // 最初の10個まで
-        
-        generateModels.forEach(m => {
-          const modelName = m.name.replace('models/', '');
-          results += '  • ' + modelName + '\n';
-        });
-        
-        if (generateModels.length > 0) {
-          results += '\n推奨: ' + generateModels[0].name.replace('models/', '');
-        }
-      } else {
-        results += '[警告] モデルリストが空です\n';
-      }
-    } else {
-      results += '[エラー] API接続エラー: ' + listStatusCode + '\n';
-      results += 'レスポンス: ' + listResponse.getContentText().substring(0, 200);
-    }
-  } catch (error) {
-    results += '[エラー] 例外エラー: ' + error.message + '\n\n';
-    results += '確認事項:\n';
-    results += '1. APIキーが正しく設定されているか\n';
-    results += '2. Google AI Studioで取得したキーか\n';
-    results += '3. ネットワーク接続があるか';
-  }
-  
-  SpreadsheetApp.getUi().alert('API接続テスト', results, SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
-// ===== デバッグ: データ確認 =====
-function debugMenuData() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('メニュー');
-  if (!sheet) {
-    SpreadsheetApp.getUi().alert('エラー', 'メニューシートが見つかりません', SpreadsheetApp.getUi().ButtonSet.OK);
-    return;
-  }
-  
-  const activeRow = sheet.getActiveRange().getRow();
-  if (activeRow <= 1) {
-    SpreadsheetApp.getUi().alert('エラー', 'データ行を選択してください', SpreadsheetApp.getUi().ButtonSet.OK);
-    return;
-  }
-  
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const colIndex = (name) => headers.indexOf(name);
-  const row = sheet.getRange(activeRow, 1, 1, sheet.getLastColumn()).getValues()[0];
-  
-  const publishStatus = row[colIndex('メニュー表示状態')];
-  const name = row[colIndex('公開商品名')] || row[colIndex('商品名')];
-  
-  const message = 'デバッグ情報:\n\n' +
-    '行番号: ' + activeRow + '\n' +
-    '商品名: ' + (name || '(未設定)') + '\n' +
-    'メニュー表示状態: [' + (publishStatus || '(空)') + ']\n' +
-    '期待値: [' + PUBLISH_STATUS.VISIBLE + ']\n' +
-    '一致: ' + (publishStatus === PUBLISH_STATUS.VISIBLE ? 'はい' : 'いいえ') + '\n\n' +
-    '※ [ ] 内の値を確認してください。前後に空白がある場合は、セルを編集し直してください。';
-  
-  SpreadsheetApp.getUi().alert('デバッグ情報', message, SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
 // ===== AI補完用ヘルパー関数 =====
 /**
  * 元データを収集
@@ -1365,12 +1175,42 @@ function collectSourceData(sheet, row, headers) {
 }
 
 /**
- * Gemini APIでAI補完実行（バッチ処理）
+ * Gemini APIでAI補完実行（バッチ処理・リトライ機能付き）
  * @param {string} apiKey - Gemini API Key
  * @param {Array} batchItems - [{ row: number, data: object }]
  * @return {Array} [{ success: boolean, data?: object }]
  */
 function callGeminiForBatchCompletion_(apiKey, batchItems) {
+  const maxRetries = 3;
+  const baseDelay = 2000; // 2秒
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return callGeminiForBatchCompletionInternal_(apiKey, batchItems);
+    } catch (error) {
+      // 503エラー（Service Unavailable）の場合はリトライ
+      if (error.message.indexOf('503') !== -1 && attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt); // 指数バックオフ: 2秒, 4秒, 8秒
+        Logger.log('[callGeminiForBatchCompletion] Retry ' + (attempt + 1) + '/' + maxRetries + ' after ' + delay + 'ms due to 503 error');
+        Utilities.sleep(delay);
+        continue;
+      }
+      
+      // その他のエラー、または最大リトライ回数到達時は例外をスロー
+      throw error;
+    }
+  }
+  
+  throw new Error('AI補完に失敗しました（最大リトライ回数に到達）');
+}
+
+/**
+ * Gemini APIでAI補完実行（内部実装）
+ * @param {string} apiKey - Gemini API Key
+ * @param {Array} batchItems - [{ row: number, data: object }]
+ * @return {Array} [{ success: boolean, data?: object }]
+ */
+function callGeminiForBatchCompletionInternal_(apiKey, batchItems) {
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' + apiKey;
   
   // バッチプロンプト生成
@@ -1402,8 +1242,6 @@ function callGeminiForBatchCompletion_(apiKey, batchItems) {
   const responseText = response.getContentText();
   
   if (statusCode !== 200) {
-    Logger.log('[callGeminiForBatchCompletion] error: ' + statusCode + ' ' + responseText);
-    
     // エラーレスポンスを解析
     try {
       const errorData = JSON.parse(responseText);
@@ -1413,6 +1251,11 @@ function callGeminiForBatchCompletion_(apiKey, batchItems) {
         throw new Error('API利用制限に達しています。しばらく時間をおいてから再度お試しください。');
       }
       
+      // 503エラー（Service Unavailable）
+      if (statusCode === 503) {
+        throw new Error('Gemini APIが一時的に利用できません（503）。しばらく待ってから再試行してください。');
+      }
+      
       // その他のエラー
       const errorMessage = errorData.error && errorData.error.message 
         ? errorData.error.message 
@@ -1420,14 +1263,18 @@ function callGeminiForBatchCompletion_(apiKey, batchItems) {
       throw new Error(errorMessage);
     } catch (parseError) {
       // JSON解析失敗時
-      if (parseError.message.indexOf('API利用制限') !== -1) {
+      if (parseError.message.indexOf('API利用制限') !== -1 || parseError.message.indexOf('503') !== -1) {
         throw parseError;
       }
+      
+      // 503エラーの場合
+      if (statusCode === 503) {
+        throw new Error('Gemini APIが一時的に利用できません（503）。しばらく待ってから再試行してください。');
+      }
+      
       throw new Error('Gemini API error: ' + statusCode);
     }
   }
-  
-  Logger.log('[callGeminiForBatchCompletion] response length: ' + responseText.length);
   
   const result = JSON.parse(responseText);
   
@@ -1488,20 +1335,6 @@ function callGeminiForBatchCompletion_(apiKey, batchItems) {
   }
   
   return results;
-}
-
-/**
- * Gemini APIでAI補完実行（単一件・後方互換用）
- */
-function callGeminiForCompletion_(apiKey, source) {
-  // バッチ処理を使用
-  const batchResult = callGeminiForBatchCompletion_(apiKey, [{ row: 0, data: source }]);
-  
-  if (batchResult.length > 0 && batchResult[0].success) {
-    return batchResult[0].data;
-  } else {
-    throw new Error('AI補完に失敗しました');
-  }
 }
 
 /**
@@ -1567,48 +1400,6 @@ function buildBatchCompletionPrompt_(batchItems) {
   });
   
   return prompt;
-}
-
-/**
- * AI補完プロンプト生成（単一件・後方互換用）
- */
-function buildCompletionPrompt_(source) {
-  return '以下の「お酒（酒類）アイテム」の情報について、公式情報（メーカー公式サイト、正規輸入元、公式資料）を最優先に、欠損値または明らかに間違っている情報のみを補完・修正してください。\n\n' +
-    '補完対象:\n' +
-    '- 空欄・未入力のフィールド\n' +
-    '- 明らかに間違っている情報（例：存在しないメーカー名、不整合な度数、誤った国名など）\n' +
-    '- 整合性のない情報（例：商品名とメーカーが一致しない、不可能な熟成年数など）\n\n' +
-    '既存値が妥当で正確な場合は変更せず、欠損または誤りがあるフィールドのみを返してください。\n\n' +
-    'JSONスキーマ（補完が必要なフィールドのみ返す）:\n' +
-    '{\n' +
-    '  "name": "商品名",\n' +
-    '  "maker": "メーカー名（正規表記）",\n' +
-    '  "category": "カテゴリ（酒種。例：ウイスキー／ラム／ジン／ビール／ワイン 等）",\n' +
-    '  "type": "タイプ（酒種内の分類。例：ウイスキーならシングルモルト・ブレンデッド、ラムならダーク・ホワイト、ワインならフルボディ 等）",\n' +
-    '  "description": "50〜80文字程度の説明（宣伝文句ではなく中立・簡潔）",\n' +
-    '  "tags": ["3〜5個の味わい・特徴タグ（必ず日本語で。例：スモーキー、フルーティー、華やか、滑らか、ピーティー、バニラ、スパイシー）"],\n' +
-    '  "country": "生産国（必ず和名で統一。例：スコットランド、アイルランド、アメリカ、日本）",\n' +
-    '  "maturationPeriod": "熟成年数／期間（該当しない場合は空文字 \'\'）",\n' +
-    '  "caskType": "樽種／熟成容器（該当しない場合は空文字 \'\'）",\n' +
-    '  "alcoholVolume": "度数 (整数値、例: 43, 43.5)"\n' +
-    '}\n\n' +
-    '前提・ポリシー:\n' +
-    '- 公式情報を最優先。非公式情報しか見つからない場合は一般に妥当な定説を用いる。\n' +
-    '- 不明な項目は空文字（\'\'）とし、N/Aや未定義などの文字列は使わない。\n' +
-    '- 事実と推定が混同しないよう、description は断定的表現を避け簡潔に。\n' +
-    '- 既存値が正確な場合は変更しない。\n' +
-    '- **tagsは必ず日本語で記述してください。カタカナ語も含めて、すべて日本語で統一してください。**\n' +
-    '- 必ず有効なJSONのみを返してください。説明文やコメントは一切含めないでください。\n\n' +
-    '重要: レスポンスは必ず以下の形式で返してください:\n' +
-    '```json\n' +
-    '{\n' +
-    '  "name": "商品名",\n' +
-    '  "maker": "メーカー名",\n' +
-    '  ...\n' +
-    '}\n' +
-    '```\n\n' +
-    '既存の値:\n' +
-    JSON.stringify(source, null, 2);
 }
 
 /**

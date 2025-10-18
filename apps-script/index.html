@@ -300,25 +300,19 @@
       // サーバーからカテゴリのみを取得
       showLoading();
       
-      console.log('[init] Starting categories fetch...');
-      
       google.script.run
         .withSuccessHandler(function(data) {
-          console.log('[init] Categories received:', data);
-          
           if (!data || !data.categories) {
             showError('カテゴリの取得に失敗しました');
             return;
           }
           
           categories = data.categories;
-          console.log('[init] Categories count:', categories.length);
           
           renderCategoryButtons();
           
           // カテゴリが1件の場合は自動選択
           if (categories.length === 1) {
-            console.log('[init] Auto-selecting single category:', categories[0]);
             handleCategorySelect(categories[0]);
           } else {
             showCategorySelectionMessage();
@@ -332,15 +326,6 @@
           showError('カテゴリの読み込みに失敗しました: ' + errorMessage);
         })
         .getCategoriesForClient();
-      
-      // タイムアウト設定（30秒）
-      setTimeout(function() {
-        if (categories.length === 0) {
-          console.warn('[init] Timeout - no categories received after 30 seconds');
-          hideLoading();
-          showError('カテゴリの読み込みがタイムアウトしました。ページをリロードしてください。');
-        }
-      }, 30000);
     });
     
     function showLoading() {
@@ -397,8 +382,6 @@
     
     // カテゴリ選択時の処理
     function handleCategorySelect(category) {
-      console.log('[handleCategorySelect] Category:', category);
-      
       filters.category = category;
       filters.type = '';
       filters.maker = '';
@@ -424,19 +407,14 @@
       // メニューデータを取得（キャッシュがあればそれを使う）
       if (menuDataCache[category]) {
         // キャッシュがある場合はすぐに使用
-        console.log('[handleCategorySelect] Using cached menu data for category:', category);
         menuData = menuDataCache[category];
-        console.log('[handleCategorySelect] Menu items count from cache:', menuData.items.length);
         
         // メニューデータが取得できたらすぐに画面を表示
         initAfterCategorySelect();
       } else {
         // キャッシュがない場合はAPIから取得
-        console.log('[handleCategorySelect] Fetching menu data for category:', category);
         google.script.run
           .withSuccessHandler(function(data) {
-            console.log('[handleCategorySelect] Data received:', data);
-            
             if (!data || !data.items) {
               showError('データの形式が不正です');
               hideLoadingInTabArea();
@@ -445,8 +423,6 @@
             
             menuData = data;
             menuDataCache[category] = data; // キャッシュに保存
-            console.log('[handleCategorySelect] Menu items count:', menuData.items.length);
-            console.log('[handleCategorySelect] Menu data cached for category:', category);
             
             // メニューデータが取得できたらすぐに画面を表示
             initAfterCategorySelect();
@@ -462,18 +438,13 @@
       // タグを取得（キャッシュがあればそれを使う）
       if (tagsCache[category]) {
         // キャッシュがある場合はすぐに使用
-        console.log('[handleCategorySelect] Using cached tags for category:', category);
         availableTags = tagsCache[category];
         initMenuTagFilter();
       } else {
         // キャッシュがない場合はAPIから取得
-        console.log('[handleCategorySelect] Fetching tags for category:', category);
         google.script.run
           .withSuccessHandler(function(data) {
-            console.log('[handleCategorySelect] Tags received:', data);
-            
             if (!data || !Array.isArray(data.tags)) {
-              console.warn('[handleCategorySelect] Tags data is invalid, using empty array');
               availableTags = [];
               tagsCache[category] = [];
               return;
@@ -481,8 +452,6 @@
             
             availableTags = data.tags;
             tagsCache[category] = data.tags; // キャッシュに保存
-            console.log('[handleCategorySelect] Available tags count:', availableTags.length);
-            console.log('[handleCategorySelect] Tags cached for category:', category);
             
             // タグが取得できたらタグフィルタを更新
             initMenuTagFilter();
@@ -720,14 +689,12 @@
       if (aromaSelect) {
         aromaSelect.addEventListener('change', function() {
           filters.recommendPrefs.quickFilters.aroma = this.value;
-          console.log('[initRecommend] Aroma filter changed:', this.value);
         });
       }
       
       if (tasteSelect) {
         tasteSelect.addEventListener('change', function() {
           filters.recommendPrefs.quickFilters.taste = this.value;
-          console.log('[initRecommend] Taste filter changed:', this.value);
         });
       }
     }
@@ -884,8 +851,6 @@
       document.getElementById('recommend-loading').classList.add('hidden');
       document.getElementById('recommend-btn').disabled = false;
       
-      console.log('[handleRecommendSuccess] Response:', response);
-      
       if (response.error) {
         // エラーコードに応じた表示
         if (response.code === 'RATE_LIMIT') {
@@ -899,11 +864,7 @@
       const data = response.data;
       const resultsDiv = document.getElementById('recommend-results');
       
-      console.log('[handleRecommendSuccess] Data:', data);
-      console.log('[handleRecommendSuccess] Items count:', data.items ? data.items.length : 0);
-      
       if (!data || !data.items || data.items.length === 0) {
-        console.error('[handleRecommendSuccess] No items in response');
         showError('おすすめが見つかりませんでした。');
         return;
       }
@@ -912,16 +873,13 @@
       const validItems = data.items.filter(item => {
         const menuItem = menuData.items.find(m => m.id === item.id);
         if (!menuItem) {
-          console.warn('[handleRecommendSuccess] Item not found in menu:', item.id, 'Available IDs:', menuData.items.map(m => m.id));
+          console.warn('Item not found in menu:', item.id);
         }
         return menuItem !== undefined;
       });
       
-      console.log('[handleRecommendSuccess] Valid items count:', validItems.length);
-      
       if (validItems.length === 0) {
-        console.error('[handleRecommendSuccess] No valid items found. AI returned items:', data.items.map(i => i.id));
-        console.error('[handleRecommendSuccess] Available menu IDs:', menuData.items.map(m => m.id).slice(0, 10));
+        console.error('No valid items found');
         showError('おすすめが見つかりませんでした。AIが返したIDがメニューに存在しません。');
         return;
       }
