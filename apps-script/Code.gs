@@ -38,6 +38,8 @@ const PUBLISH_STATUS = {
 // ===== Script Properties キー =====
 const PROP_GEMINI_API_KEY = 'GEMINI_API_KEY';
 const PROP_LAST_RATE_LIMIT = 'LAST_RATE_LIMIT'; // レート制限用
+const PROP_SECRET_KEY = 'SECRET_KEY'; // アクセストークン署名用の秘密鍵
+const PROP_WEBAPP_URL = 'WEBAPP_URL'; // WebアプリのデプロイURL
 
 // ===== Webアプリ: doGet() =====
 /**
@@ -47,6 +49,15 @@ const PROP_LAST_RATE_LIMIT = 'LAST_RATE_LIMIT'; // レート制限用
 function doGet(e) {
   const path = e.parameter.path || '';
   
+  // 実際のWebアプリURLを記録（初回アクセス時またはURL変更時）
+  recordWebappUrlIfNeeded_();
+  
+  // アクセストークンの検証
+  const tokenValidation = validateAccessToken(e.parameter);
+  if (!tokenValidation.valid) {
+    return createAccessDeniedPage(tokenValidation.reason);
+  }
+  
   if (path === 'api/menu') {
     // APIモード: JSONデータのみ返す
     return serveMenuJson();
@@ -55,6 +66,29 @@ function doGet(e) {
     return HtmlService.createHtmlOutputFromFile('index')
       .setTitle('Bar Ease Hongo メニュー')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+}
+
+/**
+ * WebアプリURLを自動記録（内部関数）
+ * ScriptApp.getService().getUrl()から取得して保存
+ */
+function recordWebappUrlIfNeeded_() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const savedUrl = props.getProperty(PROP_WEBAPP_URL);
+    
+    // ScriptApp.getService().getUrl()でURLを取得
+    const currentUrl = ScriptApp.getService().getUrl();
+    
+    // URLが取得でき、かつ保存されているURLと異なる場合は更新
+    if (currentUrl && currentUrl !== savedUrl) {
+      props.setProperty(PROP_WEBAPP_URL, currentUrl);
+      Logger.log('[recordWebappUrl] WebアプリURLを自動保存: ' + currentUrl);
+    }
+  } catch (error) {
+    // エラーが発生してもWebアプリの動作には影響させない
+    Logger.log('[recordWebappUrl] Error: ' + error.message);
   }
 }
 
@@ -888,6 +922,9 @@ function onOpen() {
     .addItem('メニューに表示', 'showInMenu')
     .addItem('メニューから非表示', 'hideFromMenu')
     .addSeparator()
+    .addItem('QRコード・URL表示', 'showQRCodeDialog')
+    .addItem('WebアプリURL設定', 'updateWebappUrl')
+    .addSeparator()
     .addItem('初期設定', 'setupMenuSheet')
     .addToUi();
 }
@@ -1480,4 +1517,423 @@ function getItemName(sheet, row, headers) {
   }
   
   return '商品名なし';
+}
+
+// ===== アクセストークン検証 =====
+/**
+ * アクセストークンを検証
+ * @param {Object} params - URLパラメータ ({ token: string, expires: string })
+ * @return {Object} { valid: boolean, reason?: string }
+ */
+function validateAccessToken(params) {
+  const token = params.token;
+  const expires = params.expires;
+  
+  // トークンまたは有効期限が存在しない場合
+  if (!token || !expires) {
+    return { valid: false, reason: 'MISSING_TOKEN' };
+  }
+  
+  // 有効期限のチェック
+  const expiresTimestamp = parseInt(expires, 10);
+  if (isNaN(expiresTimestamp)) {
+    return { valid: false, reason: 'INVALID_EXPIRES' };
+  }
+  
+  const now = Date.now();
+  if (now > expiresTimestamp) {
+    return { valid: false, reason: 'EXPIRED' };
+  }
+  
+  // 署名の検証
+  const secretKey = PropertiesService.getScriptProperties().getProperty(PROP_SECRET_KEY);
+  if (!secretKey) {
+    Logger.log('[validateAccessToken] SECRET_KEY not found. Please run setupSecretKey()');
+    return { valid: false, reason: 'SERVER_ERROR' };
+  }
+  
+  const expectedToken = generateToken_(expires, secretKey);
+  if (token !== expectedToken) {
+    return { valid: false, reason: 'INVALID_TOKEN' };
+  }
+  
+  return { valid: true };
+}
+
+/**
+ * トークン生成（内部関数）
+ * @param {string} expires - 有効期限のタイムスタンプ（文字列）
+ * @param {string} secretKey - 秘密鍵
+ * @return {string} HMAC-SHA256署名
+ */
+function generateToken_(expires, secretKey) {
+  const message = 'bar-ease-hongo-' + expires;
+  const signature = Utilities.computeHmacSha256Signature(message, secretKey);
+  const token = Utilities.base64EncodeWebSafe(signature);
+  return token;
+}
+
+/**
+ * アクセス拒否ページを生成
+ * @param {string} reason - 拒否理由
+ * @return {HtmlOutput}
+ */
+function createAccessDeniedPage(reason) {
+  let title = 'アクセスが制限されています';
+  let message = '';
+  
+  switch (reason) {
+    case 'EXPIRED':
+      title = 'QRコードの有効期限が切れています';
+      message = 'このQRコードは有効期限が切れています。<br>店内の最新のQRコードをご利用ください。';
+      break;
+    case 'INVALID_TOKEN':
+      title = '無効なQRコードです';
+      message = 'このQRコードは無効です。<br>店内の正しいQRコードをご利用ください。';
+      break;
+    case 'MISSING_TOKEN':
+      title = 'アクセスが制限されています';
+      message = 'このページへのアクセスにはQRコードが必要です。<br>店内のQRコードをご利用ください。';
+      break;
+    case 'INVALID_EXPIRES':
+      title = '無効なQRコードです';
+      message = 'このQRコードは無効です。<br>店内の正しいQRコードをご利用ください。';
+      break;
+    default:
+      title = 'アクセスできません';
+      message = 'エラーが発生しました。<br>店内のQRコードをご利用ください。';
+  }
+  
+  const html = '<!DOCTYPE html>' +
+    '<html lang="ja">' +
+    '<head>' +
+      '<meta charset="UTF-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '<title>' + title + '</title>' +
+      '<style>' +
+        'body { font-family: "Noto Sans JP", system-ui, sans-serif; background: #0B0B0D; color: #D9D9D9; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }' +
+        '.container { max-width: 600px; text-align: center; }' +
+        'h1 { color: #C9A227; font-size: 2rem; margin-bottom: 1.5rem; font-weight: 700; }' +
+        'p { font-size: 1.125rem; line-height: 1.8; margin-bottom: 2rem; }' +
+        '.icon { font-size: 5rem; margin-bottom: 2rem; }' +
+      '</style>' +
+    '</head>' +
+    '<body>' +
+      '<div class="container">' +
+        '<div class="icon">🔒</div>' +
+        '<h1>' + title + '</h1>' +
+        '<p>' + message + '</p>' +
+      '</div>' +
+    '</body>' +
+    '</html>';
+  
+  return HtmlService.createHtmlOutput(html)
+    .setTitle(title)
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// ===== QRコード生成機能 =====
+/**
+ * QRコード・URL表示ダイアログを開く
+ */
+function showQRCodeDialog() {
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+  
+  // WebアプリURLの確認・自動取得試行
+  let webappUrl = props.getProperty(PROP_WEBAPP_URL);
+  
+  // 保存されていない場合、ScriptApp.getService().getUrl()で自動取得を試みる
+  if (!webappUrl) {
+    try {
+      const autoUrl = ScriptApp.getService().getUrl();
+      if (autoUrl) {
+        webappUrl = autoUrl;
+        props.setProperty(PROP_WEBAPP_URL, webappUrl);
+        Logger.log('[showQRCodeDialog] WebアプリURLを自動取得: ' + webappUrl);
+      }
+    } catch (error) {
+      Logger.log('[showQRCodeDialog] 自動取得失敗: ' + error.message);
+    }
+  }
+  
+  // それでもURLが取得できない場合は手動入力を求める
+  if (!webappUrl) {
+    const response = ui.prompt(
+      'WebアプリURLの設定',
+      '⚠️ WebアプリURLを自動取得できませんでした。\n\n' +
+      '手動でWebアプリのデプロイURLを入力してください。\n\n' +
+      '取得方法:\n' +
+      '1. Apps Scriptエディタで「デプロイ」→「デプロイを管理」を開く\n' +
+      '2. 「ウェブアプリ」のURLをコピー\n' +
+      '3. 下記に貼り付けてください\n\n' +
+      'URLの例: https://script.google.com/macros/s/XXXXX/exec\n\n' +
+      '※ 一度Webアプリにアクセスすれば、次回からは自動取得されます。',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (response.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    webappUrl = response.getResponseText().trim();
+    
+    // URLの検証
+    if (!webappUrl || !webappUrl.startsWith('https://script.google.com/')) {
+      ui.alert('エラー', '正しいWebアプリURLを入力してください。\n\nURLは https://script.google.com/ で始まる必要があります。', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // URLを保存
+    props.setProperty(PROP_WEBAPP_URL, webappUrl);
+  }
+  
+  // SECRET_KEYの存在確認
+  const secretKey = props.getProperty(PROP_SECRET_KEY);
+  if (!secretKey) {
+    const response = ui.alert(
+      '初回セットアップ',
+      'アクセストークン用の秘密鍵が設定されていません。\n\n自動的に秘密鍵を生成しますか？',
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (response !== ui.Button.YES) {
+      return;
+    }
+    
+    setupSecretKey();
+  }
+  
+  // 有効期限の選択
+  const durationResponse = ui.prompt(
+    'QRコード生成',
+    '有効期限を日数で入力してください（例: 7）\n\nデフォルト: 7日間',
+    ui.ButtonSet.OK_CANCEL
+  );
+  
+  if (durationResponse.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
+  
+  let days = 7; // デフォルト7日間
+  const inputText = durationResponse.getResponseText().trim();
+  if (inputText) {
+    const parsedDays = parseInt(inputText, 10);
+    if (!isNaN(parsedDays) && parsedDays > 0 && parsedDays <= 365) {
+      days = parsedDays;
+    } else {
+      ui.alert('エラー', '無効な日数です。1〜365の範囲で入力してください。', ui.ButtonSet.OK);
+      return;
+    }
+  }
+  
+  // トークン付きURLを生成
+  const url = generateAccessURL(days);
+  
+  // QRコードURLを生成（QR Server API使用）
+  const qrCodeUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(url);
+  
+  // 有効期限の日付を計算
+  const expiryDate = new Date();
+  expiryDate.setDate(expiryDate.getDate() + days);
+  const expiryDateStr = expiryDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
+  
+  // HTMLダイアログを生成
+  const html = '<!DOCTYPE html>' +
+    '<html>' +
+    '<head>' +
+      '<meta charset="UTF-8">' +
+      '<base target="_blank">' +
+      '<style>' +
+        'body { font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; padding: 20px; background: #f9f9f9; }' +
+        '.container { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto; }' +
+        'h2 { color: #C9A227; margin-bottom: 20px; text-align: center; font-size: 24px; }' +
+        '.qr-container { text-align: center; margin: 30px 0; padding: 20px; background: #fff; border: 3px solid #C9A227; border-radius: 8px; }' +
+        'img { display: block; margin: 0 auto; max-width: 100%; height: auto; }' +
+        '.url-box { background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0; word-break: break-all; font-size: 12px; font-family: monospace; border: 1px solid #ddd; }' +
+        '.info { color: #666; font-size: 14px; margin: 15px 0; line-height: 1.6; }' +
+        '.info strong { color: #333; }' +
+        '.expiry { background: #fff3cd; padding: 12px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #C9A227; }' +
+        '.expiry strong { color: #856404; }' +
+        'button { background: #C9A227; color: #0B0B0D; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%; margin: 10px 0; transition: background 0.3s; }' +
+        'button:hover { background: #E4C55A; }' +
+        'button:active { transform: scale(0.98); }' +
+        '.instructions { background: #e7f3ff; padding: 15px; border-radius: 8px; margin-top: 20px; font-size: 13px; line-height: 1.8; border-left: 4px solid #2196F3; }' +
+        '.instructions ul { margin: 10px 0; padding-left: 20px; }' +
+        '.instructions li { margin: 5px 0; }' +
+        '.success-msg { display: none; background: #d4edda; color: #155724; padding: 10px; border-radius: 6px; margin: 10px 0; text-align: center; border: 1px solid #c3e6cb; }' +
+        '.success-msg.show { display: block; animation: fadeIn 0.3s; }' +
+        '@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }' +
+      '</style>' +
+    '</head>' +
+    '<body>' +
+      '<div class="container">' +
+        '<h2>QRコード生成完了</h2>' +
+        '<div class="qr-container">' +
+          '<img src="' + qrCodeUrl + '" alt="QR Code" width="300" height="300" onerror="this.parentElement.innerHTML=\'<p style=color:red>QRコードの読み込みに失敗しました。URLを直接使用してください。</p>\'">' +
+        '</div>' +
+        '<div class="expiry">' +
+          '<strong>有効期限:</strong> ' + days + '日間（' + expiryDateStr + 'まで）' +
+        '</div>' +
+        '<div class="url-box" id="url-text">' + url + '</div>' +
+        '<div class="success-msg" id="success-msg">URLをコピーしました</div>' +
+        '<button onclick="copyToClipboard()">URLをコピー</button>' +
+        '<button onclick="downloadQRCode()" style="background: #666;">QRコード画像をダウンロード</button>' +
+        '<div class="instructions">' +
+          '<strong>使い方:</strong>' +
+          '<ul>' +
+            '<li>QRコード画像を右クリックして保存、または下のボタンでダウンロード</li>' +
+            '<li>印刷してA5サイズ以上で店内に掲示</li>' +
+            '<li>有効期限が切れる前に新しいQRコードを生成してください</li>' +
+          '</ul>' +
+        '</div>' +
+      '</div>' +
+      '<script>' +
+        'function copyToClipboard() {' +
+          'const url = "' + url.replace(/"/g, '\\"') + '";' +
+          'if (navigator.clipboard && navigator.clipboard.writeText) {' +
+            'navigator.clipboard.writeText(url).then(function() {' +
+              'showSuccess();' +
+            '}, function(err) {' +
+              'fallbackCopy();' +
+            '});' +
+          '} else {' +
+            'fallbackCopy();' +
+          '}' +
+        '}' +
+        'function fallbackCopy() {' +
+          'const textArea = document.createElement("textarea");' +
+          'textArea.value = "' + url.replace(/"/g, '\\"') + '";' +
+          'textArea.style.position = "fixed";' +
+          'textArea.style.left = "-999999px";' +
+          'document.body.appendChild(textArea);' +
+          'textArea.select();' +
+          'try {' +
+            'document.execCommand("copy");' +
+            'showSuccess();' +
+          '} catch (err) {' +
+            'alert("コピーに失敗しました。URLを手動でコピーしてください。");' +
+          '}' +
+          'document.body.removeChild(textArea);' +
+        '}' +
+        'function showSuccess() {' +
+          'const msg = document.getElementById("success-msg");' +
+          'msg.classList.add("show");' +
+          'setTimeout(function() { msg.classList.remove("show"); }, 3000);' +
+        '}' +
+        'function downloadQRCode() {' +
+          'const link = document.createElement("a");' +
+          'link.href = "' + qrCodeUrl + '";' +
+          'link.download = "bar-ease-hongo-qr-code.png";' +
+          'document.body.appendChild(link);' +
+          'link.click();' +
+          'document.body.removeChild(link);' +
+        '}' +
+      '</script>' +
+    '</body>' +
+  '</html>';
+  
+  const htmlOutput = HtmlService.createHtmlOutput(html)
+    .setWidth(600)
+    .setHeight(750);
+  
+  ui.showModalDialog(htmlOutput, 'QRコード・URL表示');
+}
+
+/**
+ * アクセス用URLを生成
+ * @param {number} daysValid - 有効日数
+ * @return {string} トークン付きURL
+ */
+function generateAccessURL(daysValid) {
+  daysValid = daysValid || 7;
+  
+  // WebアプリのベースURL取得（Script Propertiesから）
+  const props = PropertiesService.getScriptProperties();
+  const scriptUrl = props.getProperty(PROP_WEBAPP_URL);
+  
+  if (!scriptUrl) {
+    throw new Error('WEBAPP_URL not found. Please run showQRCodeDialog() first.');
+  }
+  
+  // 有効期限を計算（ミリ秒）
+  const expiresTimestamp = Date.now() + (daysValid * 24 * 60 * 60 * 1000);
+  const expires = String(expiresTimestamp);
+  
+  // トークン生成
+  const secretKey = props.getProperty(PROP_SECRET_KEY);
+  if (!secretKey) {
+    throw new Error('SECRET_KEY not found. Please run setupSecretKey()');
+  }
+  
+  const token = generateToken_(expires, secretKey);
+  
+  // URLを構築
+  const url = scriptUrl + '?token=' + encodeURIComponent(token) + '&expires=' + expires;
+  
+  return url;
+}
+
+/**
+ * WebアプリURLを設定・更新
+ */
+function updateWebappUrl() {
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+  
+  const currentUrl = props.getProperty(PROP_WEBAPP_URL) || '（未設定）';
+  
+  const response = ui.prompt(
+    'WebアプリURL設定',
+    '現在のWebアプリURL:\n' + currentUrl + '\n\n' +
+    '新しいWebアプリURLを入力してください。\n\n' +
+    '取得方法:\n' +
+    '1. Apps Scriptエディタで「デプロイ」→「デプロイを管理」を開く\n' +
+    '2. 「ウェブアプリ」のURLをコピー\n' +
+    '3. 下記に貼り付けてください\n\n' +
+    'URLの例: https://script.google.com/macros/s/XXXXX/exec',
+    ui.ButtonSet.OK_CANCEL
+  );
+  
+  if (response.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
+  
+  const newUrl = response.getResponseText().trim();
+  
+  // URLの検証
+  if (!newUrl || !newUrl.startsWith('https://script.google.com/')) {
+    ui.alert('エラー', '正しいWebアプリURLを入力してください。\n\nURLは https://script.google.com/ で始まる必要があります。', ui.ButtonSet.OK);
+    return;
+  }
+  
+  // URLを保存
+  props.setProperty(PROP_WEBAPP_URL, newUrl);
+  ui.alert('成功', 'WebアプリURLを保存しました。\n\n' + newUrl, ui.ButtonSet.OK);
+}
+
+/**
+ * 秘密鍵をセットアップ（初回のみ実行）
+ */
+function setupSecretKey() {
+  const props = PropertiesService.getScriptProperties();
+  const existingKey = props.getProperty(PROP_SECRET_KEY);
+  
+  if (existingKey) {
+    Logger.log('[setupSecretKey] SECRET_KEY already exists');
+    SpreadsheetApp.getUi().alert('秘密鍵はすでに設定されています');
+    return;
+  }
+  
+  // ランダムな秘密鍵を生成（256ビット）
+  const randomBytes = [];
+  for (let i = 0; i < 32; i++) {
+    randomBytes.push(Math.floor(Math.random() * 256));
+  }
+  const secretKey = Utilities.base64Encode(randomBytes);
+  
+  props.setProperty(PROP_SECRET_KEY, secretKey);
+  
+  Logger.log('[setupSecretKey] SECRET_KEY has been generated and saved');
+  SpreadsheetApp.getUi().alert('成功', '秘密鍵を生成して保存しました。\n\nこれでQRコードを生成できます。', SpreadsheetApp.getUi().ButtonSet.OK);
 }
