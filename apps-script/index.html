@@ -182,7 +182,7 @@
             <div class="space-y-6 lg:space-y-4">
               <!-- 香り -->
               <div>
-                <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">香り（Aroma / Nose）</label>
+                <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">香り</label>
                 <select id="aroma-select" 
                         class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base
                                focus:outline-none focus:border-bar-gold transition-colors">
@@ -192,7 +192,7 @@
               
               <!-- 味わい -->
               <div>
-                <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">味わい（Palate / Taste）</label>
+                <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">味わい</label>
                 <select id="taste-select" 
                         class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base
                                focus:outline-none focus:border-bar-gold transition-colors">
@@ -253,25 +253,25 @@
     
     // クイックフィルタの定義（一元管理）
     const AROMA_OPTIONS = {
-      'smoky': 'スモーキー（Smoky）- ピートを焚いたような燻製香。アイラ系に多い',
-      'peaty': 'ピーティ（Peaty）- スモークよりも泥炭の香りが強い。土っぽく、薬品っぽい印象も',
-      'fruity': 'フルーティ（Fruity）- 果実のような甘酸っぱい香り。リンゴ、洋梨、桃など',
-      'floral': 'フローラル（Floral）- 花のような華やかで繊細な香り',
-      'honey': 'ハニー（Honeyed）- はちみつのような甘く丸い香り',
-      'spicy': 'スパイシー（Spicy）- 胡椒やナツメグのような刺激。樽由来',
-      'malty': 'モルティ（Malty）- 麦芽そのものの甘い穀物香',
-      'woody': 'ウッディ（Woody / Oaky）- 熟成樽由来の木の香り、バニラ香、タンニン'
+      'smoky': 'スモーキー（ピートを焚いたような燻製香・アイラ系に多い）',
+      'peaty': 'ピーティ（スモークよりも泥炭の香りが強い・土っぽく、薬品っぽい印象も）',
+      'fruity': 'フルーティ（果実のような甘酸っぱい香り・リンゴ、洋梨、桃など）',
+      'floral': 'フローラル（花のような華やかで繊細な香り）',
+      'honey': 'ハニー（はちみつのような甘く丸い香り）',
+      'spicy': 'スパイシー（胡椒やナツメグのような刺激・樽由来）',
+      'malty': 'モルティ（麦芽そのものの甘い穀物香）',
+      'woody': 'ウッディ（熟成樽由来の木の香り、バニラ香、タンニン）'
     };
     
     const TASTE_OPTIONS = {
-      'sweet': 'スウィート（Sweet）- バニラ、キャラメル、ハチミツのような甘み',
-      'dry': 'ドライ（Dry）- 甘さ控えめでキレのある印象',
-      'rich': 'リッチ（Rich）- 濃厚で複雑。熟成感のある味わい',
-      'light': 'ライト（Light）- 軽やかで飲みやすい',
-      'oily': 'オイリー（Oily）- 舌にまとわりつくようなコク',
-      'nutty': 'ナッティ（Nutty）- アーモンド、ヘーゼルナッツなどの香ばしさ',
-      'smoky_taste': 'スモーキー / ピーティ - 香りだけでなく、味にも煙感・薬草感が出る',
-      'chocolatey': 'チョコレーティ（Chocolatey）- カカオやビターチョコのような風味'
+      'sweet': 'スウィート（バニラ、キャラメル、ハチミツのような甘み）',
+      'dry': 'ドライ（甘さ控えめでキレのある印象）',
+      'rich': 'リッチ（濃厚で複雑・熟成感のある味わい）',
+      'light': 'ライト（軽やかで飲みやすい）',
+      'oily': 'オイリー（舌にまとわりつくようなコク）',
+      'nutty': 'ナッティ（アーモンド、ヘーゼルナッツなどの香ばしさ）',
+      'smoky_taste': 'スモーキー / ピーティ（香りだけでなく、味にも煙感・薬草感が出る）',
+      'chocolatey': 'チョコレーティ（カカオやビターチョコのような風味）'
     };
     
     let currentTab = 'menu';
