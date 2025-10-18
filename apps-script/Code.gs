@@ -178,8 +178,7 @@ function getMenuData(sheet) {
       const maker = publishedMaker || sourceMaker || '';
       
       const publishedCategory = row[colIndex('公開カテゴリ')];
-      const sourceCategory = row[colIndex('タイプ')];
-      const category = publishedCategory || sourceCategory || 'その他';
+      const category = publishedCategory || 'その他';
       
       const publishedType = row[colIndex('公開タイプ')];
       const sourceType = row[colIndex('タイプ')];
