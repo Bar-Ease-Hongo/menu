@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bar Ease Hongo メニュー</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     * {
       box-sizing: border-box;
@@ -12,7 +15,7 @@
     }
     
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: "Noto Sans JP", system-ui, sans-serif;
       background-color: #0B0B0D;
       color: #F5F5F5;
       line-height: 1.6;
@@ -32,28 +35,32 @@
     }
     
     h1 {
-      font-size: 2.5rem;
+      font-size: clamp(1.75rem, 5vw, 2.5rem);
       color: #C9A227;
-      font-family: Georgia, serif;
+      font-family: "Playfair Display", serif;
       margin-bottom: 0.5rem;
+      font-weight: 700;
     }
     
     h2 {
-      font-size: 1.8rem;
+      font-size: clamp(1.5rem, 4vw, 1.8rem);
       color: #C9A227;
-      font-family: Georgia, serif;
+      font-family: "Playfair Display", serif;
       margin-bottom: 1rem;
+      font-weight: 600;
     }
     
     h3 {
-      font-size: 1.3rem;
+      font-size: clamp(1.1rem, 3vw, 1.3rem);
       color: #F5F5F5;
+      font-family: "Playfair Display", serif;
       margin-bottom: 0.5rem;
+      font-weight: 600;
     }
     
     .subtitle {
       color: #D9D9D9;
-      font-size: 1rem;
+      font-size: clamp(0.95rem, 2.5vw, 1rem);
     }
     
     /* タブ */
@@ -106,7 +113,7 @@
       display: block;
       margin-bottom: 0.5rem;
       color: #D9D9D9;
-      font-size: 0.9rem;
+      font-size: clamp(0.9rem, 2.5vw, 0.9rem);
     }
     
     input[type="text"],
@@ -195,119 +202,111 @@
     /* メニューグリッド */
     .menu-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      grid-template-columns: 1fr;
       gap: 1.5rem;
       margin-bottom: 2rem;
+      width: 100%;
     }
     
     .menu-card {
-      background: linear-gradient(135deg, rgba(20, 20, 20, 0.8) 0%, rgba(0, 0, 0, 0.9) 100%);
-      border: 1px solid #2a2a2a;
-      border-radius: 16px;
-      padding: 2rem;
-      transition: all 0.3s;
-      position: relative;
+      display: flex;
+      flex-direction: column;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid #262626;
+      border-radius: 24px;
       overflow: hidden;
+      backdrop-filter: blur(10px);
     }
     
-    .menu-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: linear-gradient(90deg, #C9A227 0%, #E4C55A 100%);
-      opacity: 0;
-      transition: opacity 0.3s;
+    .card-content {
+      padding: 1.25rem;
     }
     
-    .menu-card:hover {
-      border-color: #C9A227;
-      transform: translateY(-4px);
-      box-shadow: 0 8px 24px rgba(201, 162, 39, 0.15);
+    .card-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
     }
     
-    .menu-card:hover::before {
-      opacity: 1;
+    .card-main-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
     }
     
-    .card-header {
-      margin-bottom: 1.25rem;
-      padding-bottom: 1rem;
-      border-bottom: 1px solid rgba(201, 162, 39, 0.1);
+    .card-category {
+      font-size: clamp(0.75rem, 2vw, 0.75rem);
+      color: #C9A227;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
     
     .card-title {
-      font-size: 1.35rem;
+      font-family: "Playfair Display", serif;
+      font-size: clamp(1.2rem, 3.5vw, 1.25rem);
       color: #F5F5F5;
-      margin-bottom: 0.5rem;
       font-weight: 600;
-      letter-spacing: 0.02em;
+      line-height: 1.3;
     }
     
     .card-maker {
+      color: #a3a3a3;
+      font-size: clamp(0.9rem, 2.5vw, 0.875rem);
+    }
+    
+    .card-description {
+      color: #d4d4d4;
+      font-size: clamp(0.95rem, 2.5vw, 0.875rem);
+      line-height: 1.6;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    
+    .card-price {
       color: #C9A227;
-      font-size: 0.95rem;
-      font-weight: 500;
+      font-size: clamp(0.95rem, 2.5vw, 0.875rem);
     }
     
     .card-tags {
       display: flex;
       flex-wrap: wrap;
       gap: 0.5rem;
-      margin-bottom: 1.25rem;
     }
     
     .tag {
-      padding: 0.35rem 0.85rem;
-      background: rgba(201, 162, 39, 0.15);
-      border: 1px solid rgba(201, 162, 39, 0.3);
-      border-radius: 16px;
+      padding: 0.25rem 0.75rem;
+      background: transparent;
+      border: 1px solid #404040;
+      border-radius: 9999px;
+      color: #d4d4d4;
+      font-size: clamp(0.75rem, 2vw, 0.75rem);
+    }
+    
+    .card-footer {
+      padding: 0 1.25rem 1.25rem;
+    }
+    
+    .detail-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 0.6rem 1rem;
+      background: transparent;
+      border: 1px solid #C9A227;
+      border-radius: 9999px;
       color: #C9A227;
-      font-size: 0.8rem;
+      font-size: clamp(0.95rem, 2.5vw, 0.875rem);
       font-weight: 500;
+      cursor: pointer;
       transition: all 0.3s;
     }
     
-    .tag:hover {
-      background: rgba(201, 162, 39, 0.25);
-      border-color: #C9A227;
-    }
-    
-    .card-description {
-      color: #D9D9D9;
-      font-size: 0.95rem;
-      line-height: 1.7;
-      margin-bottom: 1.25rem;
-      min-height: 3em;
-    }
-    
-    .card-meta {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 0.75rem;
-      padding-top: 1rem;
-      border-top: 1px solid rgba(201, 162, 39, 0.1);
-    }
-    
-    .card-meta-item {
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-    
-    .card-meta-label {
-      font-size: 0.75rem;
-      color: #888;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    
-    .card-meta-value {
-      font-size: 1rem;
-      color: #F5F5F5;
-      font-weight: 600;
+    .detail-btn:hover {
+      background: #C9A227;
+      color: #0B0B0D;
     }
     
     /* レコメンド結果 */
@@ -372,9 +371,13 @@
     
     /* ローディング */
     .loading {
-      text-align: center;
-      padding: 3rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 1rem;
       color: #888;
+      width: 100%;
     }
     
     .spinner {
@@ -384,7 +387,7 @@
       width: 40px;
       height: 40px;
       animation: spin 1s linear infinite;
-      margin: 0 auto 1rem;
+      margin-bottom: 1rem;
     }
     
     @keyframes spin {
@@ -408,40 +411,101 @@
       color: #888;
     }
     
+    /* スクロールバー */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: #C9A227;
+      border-radius: 8px;
+    }
+    
     /* レスポンシブ */
-    @media (max-width: 768px) {
-      h1 {
-        font-size: 2rem;
+    /* タブレット（768px以上） */
+    @media (min-width: 768px) {
+      .menu-grid {
+        grid-template-columns: repeat(2, 1fr);
       }
       
+      .container {
+        padding: 1.5rem;
+      }
+    }
+    
+    /* PC（1280px以上） */
+    @media (min-width: 1280px) {
       .menu-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(3, 1fr);
+      }
+      
+      .container {
+        padding: 2rem;
+      }
+    }
+    
+    /* スマホ（767px以下） */
+    @media (max-width: 767px) {
+      .container {
+        padding: 0.75rem;
+      }
+      
+      header {
+        padding: 1.5rem 0;
       }
       
       .tabs {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
+        margin-bottom: 1.5rem;
       }
       
-      .menu-card {
-        padding: 1.5rem;
+      .tab {
+        padding: 0.75rem 1.25rem;
+        font-size: 0.95rem;
       }
       
-      .card-title {
-        font-size: 1.2rem;
+      .filters {
+        padding: 1.25rem;
       }
       
-      .card-meta {
-        grid-template-columns: 1fr;
-        gap: 0.5rem;
+      .filter-label {
+        font-size: 0.85rem;
+      }
+      
+      input[type="text"],
+      select,
+      textarea {
+        font-size: 16px; /* iOS Safariでのズーム防止 */
+      }
+      
+      .card-content {
+        padding: 1.25rem;
+      }
+      
+      .card-footer {
+        padding: 0 1.25rem 1.25rem;
+      }
+      
+      .detail-btn {
+        padding: 0.6rem 1rem;
+        font-size: 0.9rem;
       }
       
       .recommend-card {
         padding: 1.5rem;
       }
       
-      .recommend-title {
-        font-size: 1.2rem;
+      .modal-content {
+        max-width: 100%;
+        margin: 0;
+        border-radius: 16px 16px 0 0;
+        max-height: 95vh;
+      }
+      
+      .modal-header,
+      .modal-body {
+        padding: 1.5rem;
       }
     }
     
@@ -865,41 +929,34 @@
       
       grid.innerHTML = items.map(item => {
         const tags = item.tags && item.tags.length > 0
-          ? '<div class="card-tags">' + item.tags.map(tag => '<span class="tag">' + escapeHtml(tag) + '</span>').join('') + '</div>'
+          ? '<div class="card-tags">' + item.tags.map(tag => '<span class="tag">#' + escapeHtml(tag) + '</span>').join('') + '</div>'
           : '';
         
-        const abv = item.alcoholVolume ? item.alcoholVolume + '%' : '—';
-        const price = item.price30ml ? '¥' + item.price30ml : '—';
-        const country = item.country ? escapeHtml(item.country) : '—';
-        const category = item.category ? escapeHtml(item.category) : '—';
+        const prices = [];
+        if (item.price30ml) prices.push('30ml ¥' + item.price30ml.toLocaleString('ja-JP'));
+        if (item.price15ml) prices.push('15ml ¥' + item.price15ml.toLocaleString('ja-JP'));
+        if (item.price10ml) prices.push('10ml ¥' + item.price10ml.toLocaleString('ja-JP'));
+        const priceText = prices.length > 0 ? prices.join(' / ') : '';
         
-        return '<div class="menu-card" onclick="showDetailModal(\'' + item.id + '\')" style="cursor: pointer;">' +
-          '<div class="card-header">' +
-            '<h3 class="card-title">' + escapeHtml(item.name) + '</h3>' +
-            '<p class="card-maker">' + escapeHtml(item.maker) + '</p>' +
-          '</div>' +
-          tags +
-          '<p class="card-description">' + escapeHtml(item.description || '説明文がありません') + '</p>' +
-          '<div class="card-meta">' +
-            '<div class="card-meta-item">' +
-              '<span class="card-meta-label">Alcohol</span>' +
-              '<span class="card-meta-value">' + abv + '</span>' +
-            '</div>' +
-            '<div class="card-meta-item">' +
-              '<span class="card-meta-label">Price (30ml)</span>' +
-              '<span class="card-meta-value">' + price + '</span>' +
-            '</div>' +
-            '<div class="card-meta-item">' +
-              '<span class="card-meta-label">Origin</span>' +
-              '<span class="card-meta-value">' + country + '</span>' +
-            '</div>' +
-            '<div class="card-meta-item">' +
-              '<span class="card-meta-label">Category</span>' +
-              '<span class="card-meta-value">' + category + '</span>' +
+        const categoryDisplay = item.type ? escapeHtml(item.category) + ' / ' + escapeHtml(item.type) : escapeHtml(item.category);
+        
+        return '<article class="menu-card">' +
+          '<div class="card-content">' +
+            '<div class="card-inner">' +
+              '<div class="card-main-info">' +
+                '<span class="card-category">' + categoryDisplay + '</span>' +
+                '<h3 class="card-title">' + escapeHtml(item.name) + '</h3>' +
+                '<p class="card-maker">' + escapeHtml(item.maker) + '</p>' +
+                '<p class="card-description">' + escapeHtml(item.description || '') + '</p>' +
+                (priceText ? '<p class="card-price">' + priceText + '</p>' : '') +
+              '</div>' +
+              tags +
             '</div>' +
           '</div>' +
-          '<div style="margin-top: 1rem; text-align: center; font-size: 0.85rem; color: #C9A227;">クリックして詳細を表示 →</div>' +
-        '</div>';
+          '<div class="card-footer">' +
+            '<button class="detail-btn" onclick="showDetailModal(\'' + item.id + '\'); event.stopPropagation();">詳しく見る</button>' +
+          '</div>' +
+        '</article>';
       }).join('');
     }
     
@@ -1024,10 +1081,12 @@
       if (!item) return;
       
       // ヘッダー
-      const headerHtml = '<span class="text-xs uppercase tracking-wide" style="color: #C9A227;">' + escapeHtml(item.category) + '</span>' +
-        '<h2 style="font-family: Georgia, serif; font-size: 2rem; color: #F5F5F5; margin-top: 0.5rem;">' + escapeHtml(item.name) + '</h2>' +
-        '<p style="color: #C9A227; font-size: 1.1rem; margin-top: 0.5rem;">' + escapeHtml(item.maker) + '</p>' +
-        (item.tags && item.tags.length > 0 ? '<div class="card-tags" style="margin-top: 1rem;">' + item.tags.map(tag => '<span class="tag">' + escapeHtml(tag) + '</span>').join('') + '</div>' : '');
+      const categoryDisplay = item.type ? escapeHtml(item.category) + ' / ' + escapeHtml(item.type) : escapeHtml(item.category);
+      
+      const headerHtml = '<span class="text-xs uppercase tracking-wide" style="color: #C9A227; font-size: 0.75rem; letter-spacing: 0.1em; font-weight: 600;">' + categoryDisplay + '</span>' +
+        '<h2 style="font-family: \'Playfair Display\', serif; font-size: 2rem; color: #F5F5F5; margin-top: 0.5rem; font-weight: 600;">' + escapeHtml(item.name) + '</h2>' +
+        '<p style="color: #a3a3a3; font-size: 0.875rem; margin-top: 0.5rem;">' + escapeHtml(item.maker) + '</p>' +
+        (item.tags && item.tags.length > 0 ? '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem;">' + item.tags.map(tag => '<span style="padding: 0.25rem 0.75rem; border: 1px solid #404040; border-radius: 9999px; color: #d4d4d4; font-size: 0.75rem;">#' + escapeHtml(tag) + '</span>').join('') + '</div>' : '');
       
       // ボディ
       let bodyHtml = '';
@@ -1062,6 +1121,8 @@
       
       // 詳細情報
       const details = [];
+      if (item.category) details.push({ label: 'カテゴリ', value: item.category });
+      if (item.type) details.push({ label: 'タイプ', value: item.type });
       if (item.alcoholVolume) details.push({ label: 'アルコール度数', value: item.alcoholVolume + '%' });
       if (item.country) details.push({ label: '生産国', value: item.country });
       if (item.distillery) details.push({ label: '蒸溜所', value: item.distillery });

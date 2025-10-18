@@ -16,7 +16,7 @@ const EXISTING_HEADERS = [
 ];
 
 const NEW_HEADERS = [
-  '公開商品名', '公開メーカー', '公開カテゴリ', '公開タグ', '公開説明文',
+  '公開カテゴリ', '公開タイプ', '公開商品名', '公開メーカー', '公開タグ', '公開説明文',
   '公開度数',
   'AI補完状態', 'メニュー表示状態',
   'ID', '更新日時'
@@ -178,8 +178,12 @@ function getMenuData(sheet) {
       const maker = publishedMaker || sourceMaker || '';
       
       const publishedCategory = row[colIndex('公開カテゴリ')];
+      const sourceCategory = row[colIndex('タイプ')];
+      const category = publishedCategory || sourceCategory || 'その他';
+      
+      const publishedType = row[colIndex('公開タイプ')];
       const sourceType = row[colIndex('タイプ')];
-      const category = publishedCategory || sourceType || 'その他';
+      const type = publishedType || sourceType || '';
       
       const publishedTags = row[colIndex('公開タグ')];
       const sourceTags = row[colIndex('ピート感')];
@@ -204,6 +208,7 @@ function getMenuData(sheet) {
         name,
         maker,
         category,
+        type,
         tags,
         description,
         alcoholVolume,
@@ -438,7 +443,6 @@ function buildRecommendPrompt_(request) {
   const candidatesText = candidates.map((c, i) => {
     let line = `${i + 1}. [ID: ${c.id}] ${c.name}`;
     if (c.maker) line += ` (${c.maker})`;
-    if (c.description) line += ` - ${c.description}`;
     if (c.tags && c.tags.length > 0) line += ` [タグ: ${c.tags.join(', ')}]`;
     if (c.price) line += ` ¥${c.price}`;
     if (c.abv) line += ` ${c.abv}%`;
@@ -658,7 +662,7 @@ function handleSheetEdit(e) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const colIndex = (name) => headers.indexOf(name) + 1;
   
-  const colIdStart = colIndex('公開商品名');
+  const colIdStart = colIndex('公開カテゴリ');
   const colIdEnd = colIndex('公開度数');
   const colPublishStatus = colIndex('メニュー表示状態');
   const colId = colIndex('ID');
@@ -931,18 +935,71 @@ function checkSettings() {
   const cached = cache.get('menuData');
   const cacheStatus = cached ? '✓ 有効（10分間）' : '✗ なし';
   
+  // AI_Logsから今日の使用統計を取得
+  const stats = getAiUsageStats();
+  
   const message = '設定状況:\n\n' +
     '【API設定】\n' +
     '• GEMINI_API_KEY: ' + (geminiApiKey ? '✓ 設定済み' : '✗ 未設定') + '\n' +
     '• 使用モデル: gemini-2.0-flash-exp\n\n' +
     '【キャッシュ】\n' +
     '• メニューデータ: ' + cacheStatus + '\n\n' +
+    '【AI使用状況（本日）】\n' +
+    '• AIおすすめリクエスト: ' + stats.todayCount + '回\n' +
+    '• 平均レイテンシ: ' + stats.avgLatency + 'ms\n\n' +
+    '【無料枠の制限】\n' +
+    '• 1日: 1,500 requests\n' +
+    '• 1分: 15 requests\n' +
+    '• トークン: 1M tokens/分\n\n' +
+    '💡 現在の使用量は十分に余裕があります。\n\n' +
     '未設定の項目がある場合は、Apps Script エディタで\n' +
     '「プロジェクトの設定」→「スクリプト プロパティ」から設定してください。\n\n' +
     '設定例:\n' +
     '• GEMINI_API_KEY: your-gemini-api-key';
   
   SpreadsheetApp.getUi().alert(message);
+}
+
+/**
+ * AI使用統計を取得
+ */
+function getAiUsageStats() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logSheet = ss.getSheetByName('AI_Logs');
+  
+  if (!logSheet) {
+    return { todayCount: 0, avgLatency: 0 };
+  }
+  
+  const lastRow = logSheet.getLastRow();
+  if (lastRow <= 1) {
+    return { todayCount: 0, avgLatency: 0 };
+  }
+  
+  const data = logSheet.getRange(2, 1, lastRow - 1, 8).getValues();
+  
+  // 今日の日付
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  let todayCount = 0;
+  let totalLatency = 0;
+  
+  data.forEach(row => {
+    const timestamp = new Date(row[0]); // タイムスタンプ列
+    const latency = row[7]; // レイテンシ列
+    
+    if (timestamp >= today) {
+      todayCount++;
+      if (latency && !isNaN(latency)) {
+        totalLatency += latency;
+      }
+    }
+  });
+  
+  const avgLatency = todayCount > 0 ? Math.round(totalLatency / todayCount) : 0;
+  
+  return { todayCount, avgLatency };
 }
 
 // ===== デバッグ: Gemini API接続テスト =====
@@ -1161,11 +1218,11 @@ function buildCompletionPrompt_(source) {
     '{\n' +
     '  "name": "商品名",\n' +
     '  "maker": "メーカー名（正規表記）",\n' +
-    '  "category": "カテゴリ（例：ウイスキー／ラム／ジン／ビール 等）",\n' +
+    '  "category": "カテゴリ（酒種。例：ウイスキー／ラム／ジン／ビール／ワイン 等）",\n' +
+    '  "type": "タイプ（酒種内の分類。例：ウイスキーならシングルモルト・ブレンデッド、ラムならダーク・ホワイト 等）",\n' +
     '  "description": "50〜80文字程度の説明（宣伝文句ではなく中立・簡潔）",\n' +
     '  "tags": ["3〜5個の味わい・特徴タグ（必ず日本語で。例：スモーキー、フルーティー、華やか、滑らか、ピーティー、バニラ、スパイシー）"],\n' +
     '  "country": "生産国（必ず和名で統一。例：スコットランド、アイルランド、アメリカ、日本）",\n' +
-    '  "type": "タイプ（銘柄の種別。例：シングルモルト、ブレンデッド、IPA など）",\n' +
     '  "maturationPeriod": "熟成年数／期間（該当しない場合は \'N/A\' 等）",\n' +
     '  "caskType": "樽種／熟成容器（該当しない場合は \'N/A\' 等）",\n' +
     '  "alcoholVolume": "度数 (整数値、例: 43, 43.5)"\n' +
@@ -1202,6 +1259,9 @@ function updatePublishedColumns(sheet, row, headers, aiResult) {
   }
   if (aiResult.category) {
     sheet.getRange(row, colIndex('公開カテゴリ')).setValue(aiResult.category);
+  }
+  if (aiResult.type) {
+    sheet.getRange(row, colIndex('公開タイプ')).setValue(aiResult.type);
   }
   if (aiResult.tags) {
     const tagsStr = Array.isArray(aiResult.tags) ? aiResult.tags.join(', ') : aiResult.tags;
