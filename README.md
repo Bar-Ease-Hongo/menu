@@ -1,19 +1,20 @@
-# Bar Ease Hongo メニュー配信システム（GAS完結版）
+# Bar Ease Hongo メニュー配信システム（GAS完結 + GitHub Pages 両対応）
 
 Google スプレッドシートを唯一の管理画面として扱い、**Google Apps Script (GAS) + Gemini 2.0 Flash Exp** で完結するメニュー配信システムです。ブラウザリロードで即座に反映され、AI補完とAIおすすめ機能も搭載しています。
 
 ---
 
-## 🎯 現行システム構成（GAS完結版）
+## 🎯 現行システム構成（GAS完結 + GitHub Pages 両対応）
 
 - **Googleスプレッドシート**: メニュー管理（SSOT）
-- **Google Apps Script (GAS)**: Webアプリ配信 + AI機能
+- **Google Apps Script (GAS)**: Webアプリ配信 + AI機能 + JSON API（外部公開）
+- **GitHub Pages（任意）**: 静的フロントエンド（GASのJSON APIを利用）
 - **Gemini 2.0 Flash Experimental**: AIレコメンド＋AI補完エンジン
 - **GitHub**: ソースコード管理
 
 ### 主な機能
 
-✅ **メニュー一覧表示**: Webアプリで承認済み商品を即時配信（~1000件）  
+✅ **メニュー一覧表示**: Webアプリで承認済み商品を即時配信（~1000件）
 ✅ **クライアント検索**: ブラウザ内で検索/絞込/ソート（サーバー負荷なし）  
 ✅ **AI補完**: Gemini 2.0 Flash Expで商品情報を自動補完（公式情報優先、欠損値のみ、最大10件のバッチ処理）  
 ✅ **AIおすすめ**: Gemini 2.0 Flash Expで再ランク＋理由生成（80〜120字、クイックフィルタ対応）  
@@ -30,6 +31,8 @@ Google スプレッドシートを唯一の管理画面として扱い、**Googl
 ├── apps-script/           # GAS完結版の実装
 │   ├── Code.gs           # メインロジック（doGet, recommend, 承認反映）
 │   └── index.html        # Webアプリ UI（Vanilla JS）
+├── github-pages/          # GitHub Pages 用の静的サイト
+│   └── index.html         # 外部API（GAS）を利用するフロントエンド
 ├── contracts/            # APIコントラクト（将来のAWS再統合用）
 │   └── recommend.ts      # レコメンドAPI型定義（固定）
 ├── docs/                 # ドキュメント
@@ -78,7 +81,7 @@ Google スプレッドシートを唯一の管理画面として扱い、**Googl
 4. 認可ダイアログで `続行` → アカウント選択 → `許可`
 5. 「セットアップ完了」ダイアログが表示されればOK
 
-### 5. Webアプリとして公開
+### 5. Webアプリとして公開（GAS UI / JSON API）
 
 1. Apps Script エディタで `デプロイ` → `新しいデプロイ`
 2. 種類: `ウェブアプリ`
@@ -88,7 +91,14 @@ Google スプレッドシートを唯一の管理画面として扱い、**Googl
 4. `デプロイ` をクリック
 5. WebアプリのURLをコピー
 
-### 6. 動作確認
+#### 5.1 公開API（外部利用）を有効化（任意）
+- `apps-script/Code.gs` は `path=api/*` に対してJSONを返します
+- 簡易認証トークンで保護しています（`PUBLIC_API_TOKEN`）
+  1. Apps Script の `スクリプト プロパティ` に `PUBLIC_API_TOKEN` を追加
+  2. 任意の共有トークンを設定（例: 長めのランダム文字列）
+  3. GitHub Pages 側の `github-pages/index.html` にある `API_TOKEN` を同じ値に変更
+
+### 6. 動作確認（GAS内UI）
 
 1. WebアプリのURLをブラウザで開く
 2. カテゴリを選択
@@ -96,6 +106,30 @@ Google スプレッドシートを唯一の管理画面として扱い、**Googl
 4. AIおすすめタブで「おすすめを表示」をクリックして動作確認
 
 詳細は **[docs/README_OWNER.md](./docs/README_OWNER.md)** を参照してください。
+
+---
+
+## 🌐 GitHub Pages（プロジェクトサイト）での公開（任意）
+
+### 1. 配置
+- ディレクトリ `github-pages/` に `index.html` を配置済み
+- `API_BASE_URL` をあなたのGAS WebアプリURLに変更（例: `https://script.google.com/macros/s/xxxx/exec`）
+- `API_TOKEN` を `PUBLIC_API_TOKEN` と一致させる
+
+### 2. GitHub Pages 設定
+- Settings > Pages
+  - Source: Deploy from a branch
+  - Branch: main
+  - Folder: `/github-pages`
+- 公開URL: `https://username.github.io/<リポジトリ名>/`
+
+### 3. 注意事項（セキュリティ）
+- クライアント埋め込みの `API_TOKEN` は秘匿できません（開発者ツールで参照可能）
+- 簡易的なアクセス制御として利用し、以下を併用してください：
+  - リクエスト頻度制限・同時数制限（Code.gsの `checkRateLimit` を活用）
+  - トークンのローテーション（`Script Properties` 差し替え）
+  - 参照専用APIのみに限定
+  - 必要に応じて中継サーバ（Cloudflare Workers 等）
 
 ---
 
@@ -163,11 +197,13 @@ Google スプレッドシートを唯一の管理画面として扱い、**Googl
 - **型**: `RecommendRequest`, `RecommendResponse`, `RecommendError`
 - **実装**: 現在はGemini、将来はEmbeddings（AWS Lambda）に無痛切替可能
 
-### GAS実装の主要関数
+### GAS実装の主要関数（両対応）
 
 | 関数 | 目的 |
 |------|------|
-| `doGet()` | Webアプリのエントリーポイント（HTML配信またはJSON API） |
+| `doGet()` | Webアプリのエントリーポイント（HTML配信 or JSON API） |
+| `doPost()` | JSON API: `path=api/recommend` 受付 |
+| `verifyToken_()` | `path=api/*` の時のみ簡易トークン検証 |
 | `getCategoriesForClient()` | カテゴリ一覧取得（CacheService対応） |
 | `getMenuDataForClient()` | メニューデータ取得（カテゴリフィルタ、CacheService対応） |
 | `getTagsForCategory()` | カテゴリ別タグ一覧取得（CacheService対応） |

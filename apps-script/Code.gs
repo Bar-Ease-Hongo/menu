@@ -38,6 +38,7 @@ const PUBLISH_STATUS = {
 // ===== Script Properties キー =====
 const PROP_GEMINI_API_KEY = 'GEMINI_API_KEY';
 const PROP_LAST_RATE_LIMIT = 'LAST_RATE_LIMIT'; // レート制限用
+const PROP_PUBLIC_API_TOKEN = 'PUBLIC_API_TOKEN'; // 公開API用の簡易トークン
 
 // ===== Webアプリ: doGet() =====
 /**
@@ -45,16 +46,76 @@ const PROP_LAST_RATE_LIMIT = 'LAST_RATE_LIMIT'; // レート制限用
  * 初回ロード時に全データをJSON形式で返すか、HTMLページを返す
  */
 function doGet(e) {
-  const path = e.parameter.path || '';
-  
-  if (path === 'api/menu') {
-    // APIモード: JSONデータのみ返す
-    return serveMenuJson();
-  } else {
-    // HTMLモード: index.htmlを返す
-    return HtmlService.createHtmlOutputFromFile('index')
-      .setTitle('Bar Ease Hongo メニュー')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  const path = e && e.parameter && e.parameter.path ? e.parameter.path : '';
+
+  // API配信（JSON）
+  if (path && path.indexOf('api/') === 0) {
+    const output = ContentService.createTextOutput().setMimeType(ContentService.MimeType.JSON);
+    try {
+      verifyToken_(e);
+      switch (path) {
+        case 'api/categories': {
+          const data = getCategoriesForClient();
+          return output.setContent(JSON.stringify(data));
+        }
+        case 'api/menu': {
+          const category = e.parameter.category || null;
+          const data = getMenuDataForClient({ category: category });
+          return output.setContent(JSON.stringify(data));
+        }
+        case 'api/tags': {
+          const category = e.parameter.category;
+          if (!category) throw new Error('category is required');
+          const data = getTagsForCategory(category);
+          return output.setContent(JSON.stringify(data));
+        }
+        default: {
+          return output.setContent(JSON.stringify({ error: true, code: 'INVALID_ENDPOINT', message: 'Invalid endpoint' }));
+        }
+      }
+    } catch (err) {
+      return output.setContent(JSON.stringify({ error: true, code: 'API_ERROR', message: err.message }));
+    }
+  }
+
+  // HTML配信（GAS内UI）
+  return HtmlService.createHtmlOutputFromFile('index')
+    .setTitle('Bar Ease Hongo メニュー')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function doPost(e) {
+  const path = e && e.parameter && e.parameter.path ? e.parameter.path : '';
+  const output = ContentService.createTextOutput().setMimeType(ContentService.MimeType.JSON);
+
+  if (!(path && path.indexOf('api/') === 0)) {
+    return output.setContent(JSON.stringify({ error: true, code: 'INVALID_ENDPOINT', message: 'Invalid endpoint' }));
+  }
+
+  try {
+    verifyToken_(e);
+    if (path === 'api/recommend') {
+      const body = e.postData && e.postData.contents ? e.postData.contents : '{}';
+      const request = JSON.parse(body);
+      const result = recommend(request);
+      return output.setContent(JSON.stringify(result));
+    }
+    return output.setContent(JSON.stringify({ error: true, code: 'INVALID_ENDPOINT', message: 'Invalid endpoint' }));
+  } catch (err) {
+    return output.setContent(JSON.stringify({ error: true, code: 'API_ERROR', message: err.message }));
+  }
+}
+
+// ===== 公開API用 簡易トークン検証 =====
+function verifyToken_(e) {
+  const path = e && e.parameter && e.parameter.path ? e.parameter.path : '';
+  // api/* のみ検証（GAS内index.htmlでのgoogle.script.runは非API扱い）
+  if (!(path && path.indexOf('api/') === 0)) return;
+
+  const provided = e && e.parameter && e.parameter.token ? String(e.parameter.token) : '';
+  const expected = PropertiesService.getScriptProperties().getProperty(PROP_PUBLIC_API_TOKEN) || '';
+  if (!expected || provided !== expected) {
+    throw new Error('INVALID_TOKEN');
   }
 }
 

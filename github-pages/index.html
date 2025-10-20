@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <title>Bar Ease Hongo メニュー（GitHub Pages）</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'bar-dark': '#0B0B0D',
+            'bar-gold': '#C9A227',
+            'bar-gold-light': '#E4C55A',
+            'bar-gray': '#D9D9D9',
+            'bar-gray-dark': '#2a2a2a',
+          },
+          fontFamily: {
+            'serif': ['Playfair Display', 'serif'],
+            'sans': ['Noto Sans JP', 'system-ui', 'sans-serif'],
+          },
+          fontSize: {
+            'xxl': '1.75rem',
+            'xxxl': '2rem',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    html { font-size: 18px; }
+    body { font-family: 'Noto Sans JP', system-ui, sans-serif; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .animate-spin-custom { animation: spin 1s linear infinite; }
+  </style>
+</head>
+<body class="bg-bar-dark text-gray-100 overflow-x-hidden">
+  <div class="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
+    <header class="mb-6 sm:mb-8 py-6 sm:py-8 border-b border-bar-gray-dark">
+      <h1 class="text-6xl sm:text-6xl lg:text-5xl text-bar-gold font-serif font-black lg:font-bold mb-4 lg:mb-2">Bar Ease Hongo</h1>
+      <p class="text-2xl sm:text-3xl lg:text-base text-bar-gray font-medium">心に残る一杯との出会いを。</p>
+      <p class="mt-2 text-sm text-neutral-400">GitHub Pages 版（外部API連携）</p>
+    </header>
+
+    <div class="mb-6 sm:mb-8">
+      <h2 class="text-2xl sm:text-3xl lg:text-base text-bar-gray mb-4 lg:mb-3 font-bold lg:font-semibold">カテゴリ</h2>
+      <div id="category-buttons" class="flex flex-wrap gap-3 lg:gap-2"></div>
+    </div>
+
+    <div id="main-tabs" class="hidden flex gap-4 sm:gap-5 lg:gap-3 mb-6 sm:mb-8 border-b-2 border-bar-gray-dark overflow-x-auto">
+      <button class="tab-btn px-7 sm:px-8 lg:px-6 py-5 lg:py-3 text-2xl sm:text-3xl lg:text-base text-bar-gray border-b-2 border-transparent transition-all duration-300 hover:text-bar-gold whitespace-nowrap font-bold lg:font-semibold" data-tab="menu">メニュー一覧</button>
+      <button class="tab-btn px-7 sm:px-8 lg:px-6 py-5 lg:py-3 text-2xl sm:text-3xl lg:text-base text-bar-gray border-b-2 border-transparent transition-all duration-300 hover:text-bar-gold whitespace-nowrap font-bold lg:font-semibold" data-tab="recommend">おすすめ</button>
+    </div>
+
+    <div id="tab-loading" class="hidden flex flex-col items-center justify-center py-24 lg:py-12 text-gray-500">
+      <div class="border-[5px] lg:border-4 border-bar-gray-dark border-t-bar-gold rounded-full w-24 lg:w-12 h-24 lg:h-12 animate-spin-custom mb-8 lg:mb-4"></div>
+      <p class="text-3xl sm:text-4xl lg:text-base font-medium">データを読み込んでいます...</p>
+    </div>
+
+    <div id="menu-tab" class="tab-content">
+      <div id="search-filters" class="hidden bg-black/40 border border-bar-gray-dark rounded-xl p-6 sm:p-7 lg:p-5 mb-6 sm:mb-8 backdrop-blur-sm">
+        <div class="space-y-6 lg:space-y-4">
+          <div>
+            <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">タイプ</label>
+            <select id="type-select" class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base focus:outline-none focus:border-bar-gold transition-colors">
+              <option value="">すべて</option>
+            </select>
+          </div>
+          <div>
+            <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">メーカー</label>
+            <select id="maker-select" class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base focus:outline-none focus:border-bar-gold transition-colors">
+              <option value="">すべて</option>
+            </select>
+          </div>
+          <div>
+            <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">キーワード検索</label>
+            <input type="text" id="keyword-input" class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base focus:outline-none focus:border-bar-gold transition-colors" placeholder="商品名、メーカー、説明文で検索...">
+          </div>
+          <div id="menu-tag-filter-container"></div>
+          <div class="flex gap-3 lg:gap-2">
+            <button id="search-btn" class="flex-1 px-7 sm:px-8 lg:px-6 py-6 lg:py-3 bg-bar-gold border-[3px] lg:border-2 border-bar-gold rounded-full text-bar-dark text-3xl sm:text-4xl lg:text-base font-black lg:font-semibold transition-all duration-300 hover:bg-transparent hover:text-bar-gold">検索</button>
+            <button id="reset-btn" class="px-7 sm:px-8 lg:px-6 py-6 lg:py-3 bg-transparent border-[3px] lg:border-2 border-neutral-700 rounded-full text-bar-gray text-2xl sm:text-3xl lg:text-sm font-bold lg:font-medium transition-all duration-300 hover:border-bar-gold hover:text-bar-gold">リセット</button>
+          </div>
+        </div>
+      </div>
+      <div id="menu-count" class="text-2xl sm:text-3xl lg:text-base text-bar-gray mb-6 font-bold lg:font-medium"></div>
+      <div id="menu-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6 mb-8"></div>
+    </div>
+
+    <div id="recommend-tab" class="tab-content hidden">
+      <div id="recommend-form" class="hidden bg-black/40 border border-bar-gray-dark rounded-xl p-6 sm:p-7 lg:p-5 mb-6 sm:mb-8 backdrop-blur-sm">
+        <div class="space-y-6 lg:space-y-4">
+          <div>
+            <label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">気分や好みを自由に入力</label>
+            <textarea id="recommend-text" class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base focus:outline-none focus:border-bar-gold transition-colors resize-y min-h-[180px] lg:min-h-[100px]" placeholder="例: スモーキーでフルーティー、甘さ控えめのものが飲みたい"></textarea>
+          </div>
+          <div class="flex gap-3">
+            <button class="w-full px-7 sm:px-8 lg:px-6 py-6 lg:py-3 bg-bar-gold border-[3px] lg:border-2 border-bar-gold rounded-full text-bar-dark text-3xl sm:text-4xl lg:text-base font-black lg:font-semibold transition-all duration-300 hover:bg-transparent hover:text-bar-gold disabled:opacity-50 disabled:cursor-not-allowed" id="recommend-btn">おすすめを表示</button>
+          </div>
+        </div>
+      </div>
+      <div id="recommend-error" class="hidden bg-red-900/10 border border-red-900/30 rounded-xl p-6 lg:p-4 text-red-300 text-2xl lg:text-base mb-6 lg:mb-4"></div>
+      <div id="recommend-loading" class="hidden flex flex-col items-center justify-center py-20 lg:py-12 text-gray-500">
+        <div class="border-4 border-bar-gray-dark border-t-bar-gold rounded-full w-20 lg:w-10 h-20 lg:h-10 animate-spin-custom mb-6 lg:mb-4"></div>
+        <p class="text-2xl sm:text-3xl lg:text-base font-medium">おすすめを探しています...</p>
+      </div>
+      <div id="recommend-results" class="hidden mt-8"></div>
+    </div>
+  </div>
+
+  <script>
+    // ===== 設定 =====
+    // 必ずあなたのGAS WebアプリURLに置き換えてください（例: https://script.google.com/macros/s/AKfycb.../exec）
+    const API_BASE_URL = 'YOUR_GAS_WEBAPP_URL';
+    // 簡易認証トークン（GAS側のScript Propertiesに同じ値を設定してください）
+    const API_TOKEN = 'CHANGE_ME_TOKEN';
+
+    // ===== 状態 =====
+    let menuData = { items: [], total: 0, updatedAt: '' };
+    let categories = [];
+    let availableTags = [];
+    let currentTab = 'menu';
+    let filters = {
+      keyword: '',
+      maker: '',
+      category: '',
+      type: '',
+      tags: [],
+      recommendPrefs: { memo: '' }
+    };
+
+    // ===== API =====
+    function withToken(url) {
+      const sep = url.includes('?') ? '&' : '?';
+      return `${url}${sep}token=${encodeURIComponent(API_TOKEN)}`;
+    }
+
+    async function fetchJson(url, options) {
+      const res = await fetch(withToken(url), options);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    }
+
+    async function fetchCategories() {
+      return await fetchJson(`${API_BASE_URL}?path=api/categories`);
+    }
+
+    async function fetchMenu(category) {
+      const q = category ? `&category=${encodeURIComponent(category)}` : '';
+      return await fetchJson(`${API_BASE_URL}?path=api/menu${q}`);
+    }
+
+    async function fetchTags(category) {
+      return await fetchJson(`${API_BASE_URL}?path=api/tags&category=${encodeURIComponent(category)}`);
+    }
+
+    async function callRecommend(request) {
+      return await fetchJson(`${API_BASE_URL}?path=api/recommend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request)
+      });
+    }
+
+    // ===== UI 初期化 =====
+    document.addEventListener('DOMContentLoaded', async () => {
+      initTabs();
+      showLoading();
+      try {
+        const data = await fetchCategories();
+        categories = data && data.categories ? data.categories : [];
+        renderCategoryButtons();
+        if (categories.length === 1) {
+          handleCategorySelect(categories[0]);
+        } else {
+          showCategorySelectionMessage();
+        }
+      } catch (e) {
+        showError('カテゴリの読み込みに失敗しました: ' + (e.message || ''));
+      } finally {
+        hideLoading();
+      }
+    });
+
+    function initTabs() {
+      document.querySelectorAll('.tab-btn').forEach(tab => {
+        tab.addEventListener('click', function() {
+          switchTab(this.getAttribute('data-tab'));
+        });
+      });
+      switchTab('menu');
+    }
+
+    function switchTab(tabName) {
+      currentTab = tabName;
+      document.querySelectorAll('.tab-btn').forEach(tab => {
+        if (tab.getAttribute('data-tab') === tabName) {
+          tab.classList.add('text-bar-gold', 'border-bar-gold');
+          tab.classList.remove('border-transparent');
+        } else {
+          tab.classList.remove('text-bar-gold', 'border-bar-gold');
+          tab.classList.add('border-transparent');
+        }
+      });
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      document.getElementById(tabName + '-tab').classList.remove('hidden');
+    }
+
+    function renderCategoryButtons() {
+      const container = document.getElementById('category-buttons');
+      container.innerHTML = (categories || []).map(cat => {
+        const isSelected = filters.category === cat;
+        return '<button class="category-btn px-7 sm:px-8 lg:px-4 py-5 lg:py-2 rounded-full text-2xl sm:text-3xl lg:text-sm font-black lg:font-medium transition-all duration-300 ' +
+          (isSelected ? 'bg-bar-gold border-[3px] lg:border-2 border-bar-gold text-bar-dark' : 'bg-transparent border-[3px] lg:border-2 border-neutral-700 text-bar-gray hover:border-bar-gold hover:text-bar-gold') +
+          '" data-category="' + escapeHtml(cat) + '">' + escapeHtml(cat) + '</button>';
+      }).join('');
+      container.querySelectorAll('.category-btn').forEach(btn => {
+        btn.addEventListener('click', () => handleCategorySelect(btn.getAttribute('data-category')));
+      });
+    }
+
+    function showCategorySelectionMessage() {
+      const grid = document.getElementById('menu-grid');
+      const count = document.getElementById('menu-count');
+      if (count) count.textContent = '';
+      if (grid) grid.innerHTML = '<div class="col-span-full text-center py-24 lg:py-12"><p class="text-4xl sm:text-5xl lg:text-lg text-bar-gray font-bold lg:font-medium mb-6 lg:mb-4">カテゴリを選択してください</p><p class="text-2xl sm:text-3xl lg:text-base text-neutral-500">上記のカテゴリボタンから選んで、検索してください。</p></div>';
+    }
+
+    function showLoading() {
+      const grid = document.getElementById('menu-grid');
+      if (grid) {
+        grid.innerHTML = '<div class="col-span-full flex flex-col items-center justify-center py-24 lg:py-12 text-gray-500"><div class="border-[5px] lg:border-4 border-bar-gray-dark border-t-bar-gold rounded-full w-24 lg:w-12 h-24 animate-spin-custom mb-8 lg:mb-4"></div><p class="text-3xl sm:text-4xl lg:text-base font-medium">データを読み込んでいます...</p></div>';
+      }
+    }
+    function hideLoading() {}
+    function showLoadingInTabArea() { document.getElementById('tab-loading').classList.remove('hidden'); }
+    function hideLoadingInTabArea() { document.getElementById('tab-loading').classList.add('hidden'); }
+
+    async function handleCategorySelect(category) {
+      filters.category = category;
+      filters.type = '';
+      filters.maker = '';
+      filters.keyword = '';
+      filters.tags = [];
+
+      renderCategoryButtons();
+      document.getElementById('main-tabs').classList.add('hidden');
+      document.getElementById('menu-tab').classList.add('hidden');
+      document.getElementById('recommend-tab').classList.add('hidden');
+      document.getElementById('search-filters').classList.add('hidden');
+      document.getElementById('recommend-form').classList.add('hidden');
+      document.getElementById('recommend-error').classList.add('hidden');
+      showLoadingInTabArea();
+
+      try {
+        const [menu, tags] = await Promise.all([
+          fetchMenu(category),
+          fetchTags(category).catch(() => ({ tags: [] }))
+        ]);
+        menuData = menu || { items: [], total: 0 };
+        availableTags = tags && Array.isArray(tags.tags) ? tags.tags : [];
+        initAfterCategorySelect();
+      } catch (e) {
+        showError('データの読み込みに失敗しました: ' + (e.message || ''));
+      } finally {
+        hideLoadingInTabArea();
+      }
+    }
+
+    function initAfterCategorySelect() {
+      document.getElementById('main-tabs').classList.remove('hidden');
+      if (currentTab === 'menu') document.getElementById('menu-tab').classList.remove('hidden');
+      else document.getElementById('recommend-tab').classList.remove('hidden');
+      initSearchFilters();
+      document.getElementById('search-filters').classList.remove('hidden');
+      document.getElementById('recommend-form').classList.remove('hidden');
+      renderMenu();
+      bindRecommend();
+    }
+
+    function initSearchFilters() {
+      const typeSelect = document.getElementById('type-select');
+      typeSelect.innerHTML = '<option value="">すべて</option>';
+      const types = [...new Set(menuData.items.map(i => i.type).filter(Boolean))].sort();
+      types.forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; typeSelect.appendChild(o); });
+
+      const makerSelect = document.getElementById('maker-select');
+      makerSelect.innerHTML = '<option value="">すべて</option>';
+      const makers = [...new Set(menuData.items.map(i => i.maker).filter(Boolean))].sort();
+      makers.forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = m; makerSelect.appendChild(o); });
+
+      const keywordInput = document.getElementById('keyword-input');
+      keywordInput.value = '';
+
+      initMenuTagFilter();
+
+      document.getElementById('search-btn').onclick = function() {
+        filters.type = typeSelect.value;
+        filters.maker = makerSelect.value;
+        filters.keyword = keywordInput.value;
+        renderMenu();
+      };
+
+      document.getElementById('reset-btn').onclick = function() {
+        filters.type = '';
+        filters.maker = '';
+        filters.keyword = '';
+        filters.tags = [];
+        typeSelect.value = '';
+        makerSelect.value = '';
+        keywordInput.value = '';
+        const tagSelect = document.getElementById('menu-tag-select');
+        if (tagSelect) tagSelect.selectedIndex = -1;
+        renderMenu();
+      };
+    }
+
+    function initMenuTagFilter() {
+      const container = document.getElementById('menu-tag-filter-container');
+      if (!availableTags || availableTags.length === 0) { container.innerHTML = ''; return; }
+      container.innerHTML = '<div>' +
+        '<label class="block mb-4 lg:mb-2 text-bar-gray text-xl sm:text-2xl lg:text-sm font-bold lg:font-semibold">タグ（味わいなど）<span class="ml-2 text-lg lg:text-xs text-neutral-500">最大5件まで選択可</span></label>' +
+        '<select id="menu-tag-select" multiple class="w-full px-5 sm:px-6 lg:px-4 py-5 sm:py-5 lg:py-3 bg-black/40 border-2 lg:border border-neutral-700 rounded-xl lg:rounded-lg text-gray-100 text-xl lg:text-base focus:outline-none focus:border-bar-gold transition-colors min-h-[200px] lg:min-h-[150px]">' +
+        availableTags.map(tag => '<option value="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '</option>').join('') +
+        '</select>' +
+      '</div>';
+      const tagSelect = document.getElementById('menu-tag-select');
+      if (tagSelect) {
+        tagSelect.addEventListener('change', function() {
+          const selected = Array.from(this.selectedOptions);
+          if (selected.length > 5) { selected[selected.length - 1].selected = false; alert('タグは最大5件まで選択できます。'); return; }
+          filters.tags = selected.map(o => o.value);
+        });
+      }
+    }
+
+    function renderMenu() {
+      const grid = document.getElementById('menu-grid');
+      const count = document.getElementById('menu-count');
+      let items = menuData.items || [];
+
+      if (filters.type) items = items.filter(i => i.type === filters.type);
+      if (filters.maker) items = items.filter(i => i.maker === filters.maker);
+      if (filters.keyword) {
+        const kw = filters.keyword.toLowerCase();
+        items = items.filter(i => (i.name && i.name.toLowerCase().includes(kw)) || (i.maker && i.maker.toLowerCase().includes(kw)) || (i.description && i.description.toLowerCase().includes(kw)) || (i.tags && i.tags.some(t => t.toLowerCase().includes(kw))));
+      }
+      if (filters.tags && filters.tags.length > 0) {
+        items = items.filter(i => i.tags && filters.tags.every(t => i.tags.includes(t)));
+      }
+
+      count.textContent = items.length + '件の商品';
+      if (items.length === 0) { grid.innerHTML = '<div class="col-span-full text-center py-24 lg:py-12 text-gray-400 text-3xl sm:text-4xl lg:text-base font-medium">条件に一致する商品がありませんでした。</div>'; return; }
+
+      grid.innerHTML = items.map(item => {
+        const priceParts = [];
+        if (item.price30ml) priceParts.push('30ml ¥' + Number(item.price30ml).toLocaleString('ja-JP'));
+        if (item.price15ml) priceParts.push('15ml ¥' + Number(item.price15ml).toLocaleString('ja-JP'));
+        if (item.price10ml) priceParts.push('10ml ¥' + Number(item.price10ml).toLocaleString('ja-JP'));
+        const priceText = priceParts.length ? priceParts.join(' / ') : '';
+        const tags = item.tags && item.tags.length ? '<div class="flex flex-wrap gap-3 lg:gap-2">' + item.tags.map(t => '<span class="px-4 py-2.5 lg:px-3 lg:py-1.5 bg-transparent border border-neutral-700 rounded-full text-neutral-300 text-lg lg:text-sm">#' + escapeHtml(t) + '</span>').join('') + '</div>' : '';
+        const typeDisplay = item.type ? escapeHtml(item.type) : '';
+        return '<article class="flex flex-col bg-black/40 border border-neutral-800 rounded-3xl overflow-hidden backdrop-blur-sm transition-all duration-300 hover:border-bar-gold/50">' +
+          '<div class="p-7 sm:p-8 lg:p-5">' +
+            '<div class="flex flex-col gap-6 lg:gap-4">' +
+              '<div class="flex flex-col gap-4 lg:gap-2.5">' +
+                (typeDisplay ? '<span class="text-xl sm:text-2xl lg:text-sm text-bar-gold uppercase tracking-wider font-bold lg:font-semibold">' + typeDisplay + '</span>' : '') +
+                '<h3 class="text-4xl sm:text-5xl lg:text-xl text-gray-100 font-serif font-black lg:font-semibold leading-tight">' + escapeHtml(item.name) + '</h3>' +
+                '<p class="text-2xl sm:text-3xl lg:text-base text-neutral-400 font-semibold lg:font-medium">' + escapeHtml(item.maker || '') + '</p>' +
+                '<p class="text-xl sm:text-2xl lg:text-base text-neutral-300 leading-relaxed line-clamp-3">' + escapeHtml(item.description || '') + '</p>' +
+                (priceText ? '<p class="text-3xl sm:text-4xl lg:text-base text-bar-gold font-black lg:font-medium mt-3 lg:mt-1">' + priceText + '</p>' : '') +
+              '</div>' +
+              tags +
+            '</div>' +
+          '</div>' +
+        '</article>';
+      }).join('');
+    }
+
+    function bindRecommend() {
+      const btn = document.getElementById('recommend-btn');
+      btn.onclick = async function() {
+        if (!filters.category) { showError('カテゴリを選択してください'); return; }
+        const text = document.getElementById('recommend-text').value.trim();
+        if (!text) { showError('フリーワードを入力してください'); return; }
+        const candidates = (menuData.items || []).map(i => ({ id: i.id, name: i.name }));
+        if (candidates.length === 0) { showError('候補が見つかりません'); return; }
+
+        const request = { prefs: { selectedTags: [], memo: text, category: filters.category }, candidates };
+        document.getElementById('recommend-error').classList.add('hidden');
+        document.getElementById('recommend-results').classList.add('hidden');
+        document.getElementById('recommend-loading').classList.remove('hidden');
+        btn.disabled = true;
+        try {
+          const res = await callRecommend(request);
+          handleRecommendSuccess(res);
+        } catch (e) {
+          handleRecommendError(e);
+        } finally {
+          document.getElementById('recommend-loading').classList.add('hidden');
+          btn.disabled = false;
+        }
+      };
+    }
+
+    function handleRecommendSuccess(response) {
+      if (response.error) { showError(response.message || 'エラーが発生しました'); return; }
+      const data = response.data;
+      const resultsDiv = document.getElementById('recommend-results');
+      if (!data || !data.items || data.items.length === 0) { showError('おすすめが見つかりませんでした。'); return; }
+      const validItems = data.items.filter(item => (menuData.items || []).some(m => m.id === item.id));
+      if (validItems.length === 0) { showError('おすすめが見つかりませんでした。AIが返したIDがメニューに存在しません。'); return; }
+      resultsDiv.innerHTML = '<h2 class="text-5xl sm:text-6xl lg:text-3xl text-bar-gold font-serif font-black lg:font-semibold mb-10 lg:mb-6">おすすめの一杯</h2>' +
+        (data.note ? '<p class="text-2xl sm:text-3xl lg:text-base text-bar-gray mb-10 lg:mb-6">' + escapeHtml(data.note) + '</p>' : '') +
+        validItems.map(item => {
+          const menuItem = (menuData.items || []).find(m => m.id === item.id);
+          return '<div class="bg-black/40 border border-neutral-800 rounded-3xl overflow-hidden backdrop-blur-sm transition-all duration-300 hover:border-bar-gold/50 mb-8 lg:mb-6">' +
+            '<div class="p-8 sm:p-10 lg:p-6">' +
+              '<div class="flex flex-col gap-6 lg:gap-4">' +
+                '<div>' +
+                  '<h3 class="text-4xl sm:text-5xl lg:text-2xl text-gray-100 font-black lg:font-semibold tracking-wide mb-4 lg:mb-2">' + escapeHtml(menuItem.name) + '</h3>' +
+                  '<p class="text-2xl sm:text-3xl lg:text-base text-bar-gold font-bold lg:font-medium mb-6 lg:mb-4">' + escapeHtml(menuItem.maker || '') + '</p>' +
+                  '<p class="text-2xl sm:text-3xl lg:text-base text-bar-gray leading-relaxed">' + escapeHtml(item.reason || '') + '</p>' +
+                  (item.serve ? '<p class="text-xl lg:text-sm text-neutral-400 mt-4 lg:mt-3">おすすめの提供方法: ' + escapeHtml(item.serve) + '</p>' : '') +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+      resultsDiv.classList.remove('hidden');
+    }
+
+    function handleRecommendError(error) {
+      showError('エラーが発生しました: ' + (error && error.message ? error.message : ''));
+    }
+
+    function showError(message) {
+      const area = document.getElementById('recommend-error');
+      if (area) { area.textContent = message; area.classList.remove('hidden'); }
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
+
+
